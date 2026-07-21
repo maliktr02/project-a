@@ -7,96 +7,107 @@ import java.util.*;
 
 public class Analyzer {
 
-    private static final Set<String> YOKSAYILAN_KLASORLER = new HashSet<>(Arrays.asList(
+    private static final Set<String> IGNORED_DIRECTORIES = new HashSet<>(Arrays.asList(
         ".git", ".godot", ".vs", ".idea", "node_modules", "__pycache__", "out", "target", "bin", "analyzer"
     ));
 
-    private static final Set<String> KOD_UZANTILARI = new HashSet<>(Arrays.asList(
-        ".gd", ".cs", ".java", ".py", ".cpp", ".h", ".js", ".json", ".shader", ".tscn", ".xml", ".html"
+    private static final Set<String> CODE_EXTENSIONS = new HashSet<>(Arrays.asList(
+        ".gd", ".cs", ".java", ".py", ".cpp", ".h", ".js", ".json", ".shader",
+        ".tscn", ".xml", ".html", ".toml", ".yaml", ".yml", ".ini", ".cfg"
     ));
 
-    // Terminal Renk Kodları
-    public static final String SIFIRLA = "\u001B[0m";
-    public static final String MAVI_KALIN = "\u001B[1;34m";
-    public static final String YESIL = "\u001B[32m";
-    public static final String SARI = "\u001B[33m";
-    public static final String SIYAN = "\u001B[36m";
-    public static final String MOR = "\u001B[35m";
-    public static final String BEYAZ_KALIN = "\u001B[1;37m";
+    // Terminal Color Codes
+    public static final String RESET = "\u001B[0m";
+    public static final String BLUE_BOLD = "\u001B[1;34m";
+    public static final String GREEN = "\u001B[32m";
+    public static final String YELLOW = "\u001B[33m";
+    public static final String CYAN = "\u001B[36m";
+    public static final String PURPLE = "\u001B[35m";
+    public static final String WHITE_BOLD = "\u001B[1;37m";
 
     public static void main(String[] args) {
-        File calismaDizini = new File(System.getProperty("user.dir"));
-        File anaProjeDizini = calismaDizini.getParentFile() != null ? calismaDizini.getParentFile() : calismaDizini;
+        File currentDir = new File(System.getProperty("user.dir"));
+        File rootDir = currentDir.getParentFile() != null ? currentDir.getParentFile() : currentDir;
 
-        baslikYazdir(anaProjeDizini.getName());
+        printHeader(rootDir.getName());
 
-        File[] altKlasorler = anaProjeDizini.listFiles(File::isDirectory);
+        // 1. Ekrandaki ağaç yapısını yazdırıyoruz
+        analyzeDirectoryRecursive(rootDir, "");
 
-        if (altKlasorler == null || altKlasorler.length == 0) {
-            System.out.println(" ⚠️  Analiz edilecek klasör bulunamadı.");
-            return;
-        }
+        // 2. GRAND TOTAL için tüm projeyi (mükerrer olmadan) TEK SEFERDE hesaplıyoruz
+        FolderStat globalStat = analyzeFolderContent(rootDir);
 
-        Arrays.sort(altKlasorler, Comparator.comparing(File::getName));
-
-        long toplamProjeBoyutu = 0;
-        long toplamProjeSatiri = 0;
-        int toplamProjeDosyasi = 0;
-
-        for (File klasor : altKlasorler) {
-            if (YOKSAYILAN_KLASORLER.contains(klasor.getName())) continue;
-
-            KlasorIstatistigi istatistik = klasorAnalizEt(klasor);
-
-            toplamProjeBoyutu += istatistik.toplamBoyut;
-            toplamProjeSatiri += istatistik.toplamSatir;
-            toplamProjeDosyasi += istatistik.dosyaSayisi;
-
-            tabloSatiriYazdir(
-                "/" + klasor.getName(),
-                istatistik.dosyaSayisi + " dosya, " + istatistik.klasorSayisi + " klasör",
-                boyutFormatla(istatistik.toplamBoyut),
-                istatistik.toplamSatir > 0 ? istatistik.toplamSatir + " satır" : "-",
-                zamanFormati(istatistik.sonGuncelleme)
-            );
-        }
-
-        tabloAltlikYazdir(toplamProjeDosyasi, boyutFormatla(toplamProjeBoyutu), toplamProjeSatiri);
+        printFooter(globalStat.fileCount, formatSize(globalStat.totalSize), globalStat.totalLines);
     }
 
-    private static KlasorIstatistigi klasorAnalizEt(File klasor) {
-        KlasorIstatistigi stat = new KlasorIstatistigi();
+    private static void analyzeDirectoryRecursive(File currentDir, String indent) {
+        File[] children = currentDir.listFiles();
+        if (children == null) return;
+
+        List<File> subDirs = new ArrayList<>();
+        for (File child : children) {
+            if (child.isDirectory() && !IGNORED_DIRECTORIES.contains(child.getName())) {
+                subDirs.add(child);
+            }
+        }
+
+        subDirs.sort(Comparator.comparing(File::getName));
+
+        for (int i = 0; i < subDirs.size(); i++) {
+            File dir = subDirs.get(i);
+            boolean isLast = (i == subDirs.size() - 1);
+            String prefix = isLast ? "└── " : "├── ";
+
+            FolderStat dirStat = analyzeFolderContent(dir);
+
+            String folderDisplayName = indent + prefix + dir.getName();
+
+            printTableRow(
+                folderDisplayName,
+                dirStat.fileCount + " files, " + dirStat.folderCount + " dirs",
+                formatSize(dirStat.totalSize),
+                dirStat.totalLines > 0 ? dirStat.totalLines + " lines" : "-",
+                formatTime(dirStat.lastModified)
+            );
+
+            String nextIndent = indent + (isLast ? "    " : "│   ");
+            analyzeDirectoryRecursive(dir, nextIndent);
+        }
+    }
+
+    private static FolderStat analyzeFolderContent(File folder) {
+        FolderStat stat = new FolderStat();
 
         try {
-            Files.walkFileTree(klasor.toPath(), new SimpleFileVisitor<Path>() {
+            Files.walkFileTree(folder.toPath(), new SimpleFileVisitor<Path>() {
                 @Override
                 public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-                    if (YOKSAYILAN_KLASORLER.contains(dir.getFileName().toString())) {
+                    if (IGNORED_DIRECTORIES.contains(dir.getFileName().toString())) {
                         return FileVisitResult.SKIP_SUBTREE;
                     }
-                    if (!dir.toFile().equals(klasor)) {
-                        stat.klasorSayisi++;
+                    if (!dir.toFile().equals(folder)) {
+                        stat.folderCount++;
                     }
                     return FileVisitResult.CONTINUE;
                 }
 
                 @Override
                 public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                    stat.dosyaSayisi++;
-                    long boyut = attrs.size();
-                    stat.toplamBoyut += boyut;
+                    stat.fileCount++;
+                    long size = attrs.size();
+                    stat.totalSize += size;
 
-                    long sonMod = attrs.lastModifiedTime().toMillis();
-                    if (sonMod > stat.sonGuncelleme) {
-                        stat.sonGuncelleme = sonMod;
+                    long lastMod = attrs.lastModifiedTime().toMillis();
+                    if (lastMod > stat.lastModified) {
+                        stat.lastModified = lastMod;
                     }
 
-                    String dosyaAdi = file.getFileName().toString().toLowerCase();
-                    String uzanti = dosyaAdi.contains(".") ? dosyaAdi.substring(dosyaAdi.lastIndexOf(".")) : "";
+                    String fileName = file.getFileName().toString().toLowerCase();
+                    String ext = fileName.contains(".") ? fileName.substring(fileName.lastIndexOf(".")) : "";
 
-                    if (KOD_UZANTILARI.contains(uzanti)) {
+                    if (CODE_EXTENSIONS.contains(ext)) {
                         try {
-                            stat.toplamSatir += Files.lines(file).filter(l -> !l.trim().isEmpty()).count();
+                            stat.totalLines += Files.lines(file).filter(l -> !l.trim().isEmpty()).count();
                         } catch (IOException ignored) {}
                     }
                     return FileVisitResult.CONTINUE;
@@ -107,53 +118,53 @@ public class Analyzer {
         return stat;
     }
 
-    private static void baslikYazdir(String projeAdi) {
+    private static void printHeader(String projectName) {
         System.out.println();
-        System.out.println(MOR + "📊 OYUN PROJESİ ANALİZ RAPORU " + SIFIRLA + "| Hedef: " + SIYAN + projeAdi + SIFIRLA);
-        System.out.println("---------------------------------------------------------------------------------------");
-        System.out.printf(BEYAZ_KALIN + "%-18s \t %-22s \t %-12s \t %-12s \t %-15s\n" + SIFIRLA,
-                "KLASÖR", "İÇERİK", "BOYUT", "KOD SATIRI", "SON GÜNCELLEME");
-        System.out.println("---------------------------------------------------------------------------------------");
+        System.out.println(PURPLE + "📊 GAME PROJECT ANALYSIS REPORT " + RESET + "| Target: " + CYAN + projectName + RESET);
+        System.out.println("---------------------------------------------------------------------------------------------------");
+        System.out.printf(WHITE_BOLD + "%-32s \t %-20s \t %-12s \t %-12s \t %-15s\n" + RESET,
+                "DIRECTORY", "CONTENT", "SIZE", "CODE LINES", "LAST MODIFIED");
+        System.out.println("---------------------------------------------------------------------------------------------------");
     }
 
-    private static void tabloSatiriYazdir(String klasor, String icerik, String boyut, String kodSatiri, String sonGuncelleme) {
-        System.out.printf(MAVI_KALIN + "%-18s" + SIFIRLA + " \t %-22s \t " + SARI + "%-12s" + SIFIRLA + " \t " + YESIL + "%-12s" + SIFIRLA + " \t %-15s\n",
-                klasor, icerik, boyut, kodSatiri, sonGuncelleme);
+    private static void printTableRow(String folder, String content, String size, String codeLines, String lastModified) {
+        System.out.printf(BLUE_BOLD + "%-32s" + RESET + " \t %-20s \t " + YELLOW + "%-12s" + RESET + " \t " + GREEN + "%-12s" + RESET + " \t %-15s\n",
+                folder, content, size, codeLines, lastModified);
     }
 
-    private static void tabloAltlikYazdir(int toplamDosya, String toplamBoyut, long toplamSatir) {
-        System.out.println("---------------------------------------------------------------------------------------");
-        System.out.printf(BEYAZ_KALIN + "%-18s" + SIFIRLA + " \t %-22s \t " + SARI + "%-12s" + SIFIRLA + " \t " + YESIL + "%-12s" + SIFIRLA + " \t %-15s\n",
-                "GENEL TOPLAM", toplamDosya + " Dosya", toplamBoyut, toplamSatir + " satır", "-");
-        System.out.println("---------------------------------------------------------------------------------------");
+    private static void printFooter(int totalFiles, String totalSize, long totalLines) {
+        System.out.println("---------------------------------------------------------------------------------------------------");
+        System.out.printf(WHITE_BOLD + "%-32s" + RESET + " \t %-20s \t " + YELLOW + "%-12s" + RESET + " \t " + GREEN + "%-12s" + RESET + " \t %-15s\n",
+                "GRAND TOTAL", totalFiles + " Files", totalSize, totalLines + " lines", "-");
+        System.out.println("---------------------------------------------------------------------------------------------------");
         System.out.println();
     }
 
-    private static String boyutFormatla(long bayt) {
-        if (bayt <= 0) return "0 B";
-        final String[] birimler = new String[]{"B", "KB", "MB", "GB", "TB"};
-        int digitGroups = (int) (Math.log10(bayt) / Math.log10(1024));
-        return new DecimalFormat("#,##0.#").format(bayt / Math.pow(1024, digitGroups)) + " " + birimler[digitGroups];
+    private static String formatSize(long bytes) {
+        if (bytes <= 0) return "0 B";
+        final String[] units = new String[]{"B", "KB", "MB", "GB", "TB"};
+        int digitGroups = (int) (Math.log10(bytes) / Math.log10(1024));
+        return new DecimalFormat("#,##0.#").format(bytes / Math.pow(1024, digitGroups)) + " " + units[digitGroups];
     }
 
-    private static String zamanFormati(long zamanMs) {
-        if (zamanMs == 0) return "Bilinmiyor";
-        long farkMs = System.currentTimeMillis() - zamanMs;
-        long dakika = farkMs / (1000 * 60);
-        long saat = dakika / 60;
-        long gun = saat / 24;
+    private static String formatTime(long timeMs) {
+        if (timeMs == 0) return "Unknown";
+        long diffMs = System.currentTimeMillis() - timeMs;
+        long minutes = diffMs / (1000 * 60);
+        long hours = minutes / 60;
+        long days = hours / 24;
 
-        if (dakika < 1) return "Az önce";
-        if (dakika < 60) return dakika + " dk önce";
-        if (saat < 24) return saat + " saat önce";
-        return gun + " gün önce";
+        if (minutes < 1) return "Just now";
+        if (minutes < 60) return minutes + " mins ago";
+        if (hours < 24) return hours + " hours ago";
+        return days + " days ago";
     }
 
-    private static class KlasorIstatistigi {
-        int dosyaSayisi = 0;
-        int klasorSayisi = 0;
-        long toplamBoyut = 0;
-        long toplamSatir = 0;
-        long sonGuncelleme = 0;
+    private static class FolderStat {
+        int fileCount = 0;
+        int folderCount = 0;
+        long totalSize = 0;
+        long totalLines = 0;
+        long lastModified = 0;
     }
 }
