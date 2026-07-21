@@ -1,0 +1,43 @@
+[physics_formulas.free_fall]
+vy_new = "vy_old + g * dt"
+y_new = "y_old + vy_new * dt"
+
+[physics_formulas.distance_vector]
+distance = "sqrt((x2 - x1)^2 + (y2 - y1)^2)"
+
+[physics_formulas.collision_detection]
+condition = "d <= r1 + r2"
+
+[physics_formulas.overlap_resolution]
+overlap_depth = "(r1 + r2) - d"
+
+[physics_formulas.adjustment_amount]
+x1_new = "x1 - ((x2 - x1) / d) * (dd / 2)"
+y1_new = "y1 - ((y2 - y1) / d) * (dd / 2)"
+
+[physics_formulas.merge_center]
+x_average = "(x1 + x2) / 2"
+y_average = "(y1 + y2) / 2"
+
+[physics_formulas.elastic_bounce]
+vy_new = "-e * vy_old"
+
+[physics_formulas.wall_collision]
+left_wall = "x - r <= 0 -> x = r"
+right_wall = "x + r >= W -> x = W - r"
+bottom_wall = "y + r >= H -> y = H - r"
+
+
+[physics_explanations]
+e = "damping coefficient, e ~ 0.5 to 0.8"
+g = "acceleration due to gravity, g = 9.8 m/s^2 or g = 10 m/s^2"
+d = "distance between two objects"
+vx = "velocity in x direction"
+vy = "velocity in y direction"
+x = "position in x direction"
+y = "position in y direction"
+r = "radius of object"
+x_average = "average position in x direction"
+y_average = "average position in y direction"
+W = "width of box"
+H = "height of box"
