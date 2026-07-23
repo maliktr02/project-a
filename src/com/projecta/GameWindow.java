@@ -4,11 +4,13 @@ import java.awt.*;
 import java.awt.event.*;
 import java.awt.image.BufferStrategy;
 import java.io.File;
+import javax.swing.ImageIcon;
 import javax.swing.JFrame;
 
 public class GameWindow extends JFrame implements Runnable {
 
     public enum GameState {
+        INTRO,
         MAIN_MENU,
         GAME,
         SETTINGS,
@@ -17,9 +19,10 @@ public class GameWindow extends JFrame implements Runnable {
 
     private final DataManager dataManager;
     private final AudioEngine audioEngine;
+    private final SaveManager saveManager;
     private final AchievementManager achievementManager;
 
-    private GameState currentState = GameState.MAIN_MENU;
+    private GameState currentState = GameState.INTRO;
     private String currentLang = "tr";
     private boolean isFullscreen = false;
 
@@ -38,12 +41,22 @@ public class GameWindow extends JFrame implements Runnable {
         dataManager = new DataManager();
         dataManager.loadData(rootDir);
 
+        saveManager = new SaveManager(rootDir);
         audioEngine = new AudioEngine();
+        audioEngine.init(rootDir);
         achievementManager = new AchievementManager(dataManager);
 
-        setTitle("Project A - 2048 Physics Merge");
+        setTitle(dataManager.getGameIdentity().getOrDefault("title", "Project A").toString());
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setResizable(true);
+        
+        File iconFile = new File(rootDir, "gfxgui/2d/icon.png");
+        if (iconFile.exists()) {
+            setIconImage(new ImageIcon(iconFile.getAbsolutePath()).getImage());
+        }
+
+        currentLang = saveManager.getSetting("language", "tr");
+        isFullscreen = saveManager.getSettingBool("fullscreen", false);
 
         initUI();
     }
@@ -54,14 +67,19 @@ public class GameWindow extends JFrame implements Runnable {
         canvas.setBackground(new Color(18, 19, 28));
 
         add(canvas);
-        setWindowedMode(1280, 720);
+        setWindowedMode(900, 900);
+
+        if (isFullscreen) {
+            toggleFullscreen();
+            isFullscreen = true; // ensure state is correct
+        }
 
         // Sub-Panels
         mainMenuPanel = new MainMenuPanel(dataManager, audioEngine, currentLang, new MainMenuPanel.MenuListener() {
             @Override
             public void onPlay() {
                 if (mainGamePanel == null) {
-                    mainGamePanel = new MainGamePanel(dataManager, audioEngine, achievementManager, currentLang, () -> currentState = GameState.MAIN_MENU);
+                    mainGamePanel = new MainGamePanel(dataManager, audioEngine, saveManager, achievementManager, currentLang, () -> currentState = GameState.MAIN_MENU);
                 } else {
                     mainGamePanel.initGame();
                 }
@@ -78,7 +96,7 @@ public class GameWindow extends JFrame implements Runnable {
             public void onQuit() { System.exit(0); }
         });
 
-        settingsPanel = new SettingsPanel(dataManager, audioEngine, currentLang, isFullscreen, new SettingsPanel.SettingsListener() {
+        settingsPanel = new SettingsPanel(dataManager, audioEngine, saveManager, currentLang, isFullscreen, new SettingsPanel.SettingsListener() {
             @Override
             public void onBack() { currentState = GameState.MAIN_MENU; }
 
@@ -99,7 +117,7 @@ public class GameWindow extends JFrame implements Runnable {
             }
         });
 
-        achievementsPanel = new AchievementsPanel(dataManager, achievementManager, currentLang, () -> currentState = GameState.MAIN_MENU);
+        achievementsPanel = new AchievementsPanel(dataManager, saveManager, achievementManager, currentLang, () -> currentState = GameState.MAIN_MENU);
 
         // Input Listeners
         canvas.addMouseMotionListener(new MouseMotionAdapter() {
@@ -110,6 +128,7 @@ public class GameWindow extends JFrame implements Runnable {
                 int h = canvas.getHeight();
 
                 switch (currentState) {
+                    case INTRO: break;
                     case MAIN_MENU: mainMenuPanel.mouseMoved(p, w, h); break;
                     case GAME: if (mainGamePanel != null) mainGamePanel.mouseMoved(p); break;
                     case SETTINGS: settingsPanel.mouseMoved(p); break;
@@ -124,6 +143,7 @@ public class GameWindow extends JFrame implements Runnable {
                 Point p = e.getPoint();
 
                 switch (currentState) {
+                    case INTRO: break;
                     case MAIN_MENU: mainMenuPanel.mouseClicked(p); break;
                     case GAME: if (mainGamePanel != null) mainGamePanel.mousePressed(p); break;
                     case SETTINGS: settingsPanel.mouseClicked(p); break;
@@ -139,7 +159,9 @@ public class GameWindow extends JFrame implements Runnable {
                     toggleFullscreen();
                     return;
                 }
-                if (currentState == GameState.GAME && mainGamePanel != null) {
+                if (currentState == GameState.MAIN_MENU && mainMenuPanel != null) {
+                    mainMenuPanel.keyPressed(e.getKeyCode());
+                } else if (currentState == GameState.GAME && mainGamePanel != null) {
                     mainGamePanel.keyPressed(e.getKeyCode());
                 }
             }
@@ -161,6 +183,11 @@ public class GameWindow extends JFrame implements Runnable {
     public void run() {
         long lastTime = System.nanoTime();
         final double nsPerTick = 1_000_000_000.0 / 60.0; // 60 FPS Target
+        
+        // Start intro audio
+        audioEngine.playIntroSound();
+        double introTimer = 0.0;
+        boolean introFinished = false;
 
         while (isRunning) {
             long now = System.nanoTime();
@@ -169,6 +196,16 @@ public class GameWindow extends JFrame implements Runnable {
 
             // Clamp dt to avoid physics spiral
             if (dt > 0.1) dt = 0.1;
+            
+            if (currentState == GameState.INTRO && !introFinished) {
+                introTimer += dt;
+                // Wait approx 3 seconds for intro or until audio finishes
+                if (introTimer > 3.0) {
+                    introFinished = true;
+                    currentState = GameState.MAIN_MENU;
+                    audioEngine.startBackgroundMusic();
+                }
+            }
 
             update(dt);
             render();
@@ -184,6 +221,7 @@ public class GameWindow extends JFrame implements Runnable {
         int h = canvas.getHeight();
 
         switch (currentState) {
+            case INTRO: break;
             case MAIN_MENU: mainMenuPanel.update(dt, w, h); break;
             case GAME: if (mainGamePanel != null) mainGamePanel.update(dt, w, h); break;
             case SETTINGS: break;
@@ -206,6 +244,23 @@ public class GameWindow extends JFrame implements Runnable {
         int h = canvas.getHeight();
 
         switch (currentState) {
+            case INTRO: 
+                g2d.setColor(Color.BLACK);
+                g2d.fillRect(0, 0, w, h);
+                try {
+                    File introFile = new File("gfxgui/intro.png");
+                    if (introFile.exists()) {
+                        Image introImg = new ImageIcon(introFile.getAbsolutePath()).getImage();
+                        g2d.drawImage(introImg, (w - introImg.getWidth(null))/2, (h - introImg.getHeight(null))/2, null);
+                    } else {
+                        g2d.setColor(Color.WHITE);
+                        g2d.setFont(new Font("SansSerif", Font.BOLD, 48));
+                        String loading = "PROJECT A";
+                        FontMetrics fm = g2d.getFontMetrics();
+                        g2d.drawString(loading, (w - fm.stringWidth(loading))/2, h/2);
+                    }
+                } catch (Exception e) {}
+                break;
             case MAIN_MENU: mainMenuPanel.draw(g2d, w, h); break;
             case GAME: if (mainGamePanel != null) mainGamePanel.draw(g2d, w, h); break;
             case SETTINGS: settingsPanel.draw(g2d, w, h); break;

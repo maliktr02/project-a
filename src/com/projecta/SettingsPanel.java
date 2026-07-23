@@ -15,6 +15,7 @@ public class SettingsPanel {
 
     private final DataManager dataManager;
     private final AudioEngine audioEngine;
+    private final SaveManager saveManager;
     private final SettingsListener listener;
 
     private String currentLang = "tr";
@@ -25,12 +26,16 @@ public class SettingsPanel {
     private final List<Rectangle> buttonBounds = new ArrayList<>();
     private int hoveredButton = -1;
 
-    public SettingsPanel(DataManager dataManager, AudioEngine audioEngine, String currentLang, boolean isFullscreen, SettingsListener listener) {
+    public SettingsPanel(DataManager dataManager, AudioEngine audioEngine, SaveManager saveManager, String currentLang, boolean isFullscreen, SettingsListener listener) {
         this.dataManager = dataManager;
         this.audioEngine = audioEngine;
-        this.currentLang = currentLang;
-        this.isFullscreen = isFullscreen;
+        this.saveManager = saveManager;
+        this.currentLang = saveManager.getSetting("language", currentLang);
+        this.sfxVolume = saveManager.getSettingInt("sfx_volume", 80);
+        this.musicVolume = saveManager.getSettingInt("music_volume", 70);
+        this.isFullscreen = saveManager.getSettingBool("fullscreen", isFullscreen);
         this.listener = listener;
+        listener.onVolumeChanged(this.sfxVolume, this.musicVolume);
     }
 
     public void setFullscreenState(boolean fullscreen) {
@@ -58,18 +63,24 @@ public class SettingsPanel {
                 switch (i) {
                     case 0: // Display Mode Toggle
                         isFullscreen = !isFullscreen;
+                        saveManager.setSetting("fullscreen", isFullscreen);
                         listener.onToggleFullscreen();
                         break;
                     case 1: // Language Toggle
                         currentLang = currentLang.equals("tr") ? "en" : "tr";
+                        saveManager.setSetting("language", currentLang);
                         listener.onToggleLanguage();
                         break;
                     case 2: // SFX Volume toggle (- / +)
-                        sfxVolume = (sfxVolume >= 100) ? 0 : sfxVolume + 20;
+                        sfxVolume += 20;
+                        if (sfxVolume > 100) sfxVolume = 0;
+                        saveManager.setSetting("sfx_volume", sfxVolume);
                         listener.onVolumeChanged(sfxVolume, musicVolume);
                         break;
                     case 3: // Music Volume toggle (- / +)
-                        musicVolume = (musicVolume >= 100) ? 0 : musicVolume + 20;
+                        musicVolume += 20;
+                        if (musicVolume > 100) musicVolume = 0;
+                        saveManager.setSetting("music_volume", musicVolume);
                         listener.onVolumeChanged(sfxVolume, musicVolume);
                         break;
                     case 4: // Back

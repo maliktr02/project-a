@@ -130,6 +130,8 @@ public class AudioEngine {
     public void startBackgroundMusic() {
         File bgmFile = findAudioFile("music/bgm");
         if (bgmFile == null) bgmFile = findAudioFile("music/background");
+        if (bgmFile == null) bgmFile = findAudioFile("music/main");
+        if (bgmFile == null) bgmFile = findAudioFile("main");
 
         if (bgmFile != null) {
             bgmClip = playFile(bgmFile, musicVolumePercent / 100.0f, true);

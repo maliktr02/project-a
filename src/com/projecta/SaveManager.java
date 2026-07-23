@@ -1,12 +1,17 @@
 package com.projecta;
 
 import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.*;
+import javax.crypto.Cipher;
+import javax.crypto.spec.SecretKeySpec;
 
 public class SaveManager {
 
     private static final String SAVE_FILE = "save_data.dat";
     private static final String SETTINGS_FILE = "user_settings.dat";
+    private static final String SAVE_SECRET = "ProjectA_SaveData_Secret_2026";
 
     private final File saveDir;
     private final Properties saveData = new Properties();
@@ -19,7 +24,9 @@ public class SaveManager {
     }
 
     private void loadAll() {
-        loadProps(new File(saveDir, SAVE_FILE), saveData);
+        if (new File(saveDir, SAVE_FILE).exists()) {
+            loadEncryptedProps(new File(saveDir, SAVE_FILE), saveData);
+        }
         loadProps(new File(saveDir, SETTINGS_FILE), settingsData);
     }
 
@@ -35,10 +42,53 @@ public class SaveManager {
 
     private void saveProps(File f, Properties props) {
         try (OutputStream os = new FileOutputStream(f)) {
-            props.store(os, "Project A");
+            props.store(os, "Project A Settings");
         } catch (IOException e) {
             GameLogger.get().error("SaveManager", "Failed to save " + f.getName(), e);
         }
+    }
+
+    private void loadEncryptedProps(File f, Properties props) {
+        try {
+            byte[] keyBytes = deriveKey(SAVE_SECRET);
+            byte[] encBytes = java.nio.file.Files.readAllBytes(f.toPath());
+            byte[] decrypted = decryptAES(encBytes, keyBytes);
+            props.load(new ByteArrayInputStream(decrypted));
+        } catch (Exception e) {
+            GameLogger.get().error("SaveManager", "Failed to load/decrypt " + f.getName() + ". Using empty save.", e);
+        }
+    }
+
+    private void saveEncryptedProps(File f, Properties props) {
+        try {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            props.store(baos, "Project A Encrypted Save Data");
+            byte[] keyBytes = deriveKey(SAVE_SECRET);
+            byte[] encrypted = encryptAES(baos.toByteArray(), keyBytes);
+            java.nio.file.Files.write(f.toPath(), encrypted);
+        } catch (Exception e) {
+            GameLogger.get().error("SaveManager", "Failed to encrypt/save " + f.getName(), e);
+        }
+    }
+
+    private static byte[] deriveKey(String passphrase) throws Exception {
+        MessageDigest sha = MessageDigest.getInstance("SHA-256");
+        byte[] hash = sha.digest(passphrase.getBytes(StandardCharsets.UTF_8));
+        return Arrays.copyOf(hash, 16);
+    }
+
+    private static byte[] encryptAES(byte[] data, byte[] keyBytes) throws Exception {
+        SecretKeySpec keySpec = new SecretKeySpec(keyBytes, "AES");
+        Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
+        cipher.init(Cipher.ENCRYPT_MODE, keySpec);
+        return cipher.doFinal(data);
+    }
+
+    private static byte[] decryptAES(byte[] encryptedData, byte[] keyBytes) throws Exception {
+        SecretKeySpec keySpec = new SecretKeySpec(keyBytes, "AES");
+        Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
+        cipher.init(Cipher.DECRYPT_MODE, keySpec);
+        return cipher.doFinal(encryptedData);
     }
 
     public long getHighScore() {
@@ -136,7 +186,7 @@ public class SaveManager {
     public void setSetting(String key, boolean value) { setSetting(key, String.valueOf(value)); }
 
     private void savePersistentData() {
-        saveProps(new File(saveDir, SAVE_FILE), saveData);
+        saveEncryptedProps(new File(saveDir, SAVE_FILE), saveData);
     }
 
     private void saveSettings() {

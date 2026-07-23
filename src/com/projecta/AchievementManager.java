@@ -18,11 +18,14 @@ public class AchievementManager {
     }
 
     private final DataManager dataManager;
-    private final Set<String> unlockedIds = new HashSet<>();
+    private final SaveManager saveManager;
+    private final Set<String> unlockedIds;
     private final List<Toast> activeToasts = new ArrayList<>();
 
-    public AchievementManager(DataManager dataManager) {
+    public AchievementManager(DataManager dataManager, SaveManager saveManager) {
         this.dataManager = dataManager;
+        this.saveManager = saveManager;
+        this.unlockedIds = saveManager.getUnlockedAchievements();
     }
 
     public void checkMergeAchievements(int mergedLevel, int comboCount, long totalScore, boolean escapedDanger, AudioEngine audio) {
@@ -62,6 +65,7 @@ public class AchievementManager {
         Map<String, Object> entry = achs.get(id);
         if (entry != null) {
             unlockedIds.add(id);
+            saveManager.unlockAchievement(id);
             String title = (String) entry.getOrDefault("name_tr", id);
             String desc = (String) entry.getOrDefault("desc_tr", "");
             activeToasts.add(new Toast("🏆 BAŞARIM KAZANILDI: " + title, desc));

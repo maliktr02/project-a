@@ -15,6 +15,7 @@ public class MainGamePanel {
 
     private final DataManager dataManager;
     private final AudioEngine audioEngine;
+    private final SaveManager saveManager;
     private final AchievementManager achievementManager;
     private final GameListener listener;
     private String currentLang = "tr";
@@ -35,6 +36,7 @@ public class MainGamePanel {
     private long highScore = 0;
     private boolean isPaused = false;
     private boolean isGameOver = false;
+    private double dropCooldown = 0.0;
 
     private double aimX = 0;
     private double spawnY = 80;
@@ -49,11 +51,14 @@ public class MainGamePanel {
 
     // Buttons in Overlay
     private Rectangle resumeBtn, restartBtn, menuBtn;
+    private Rectangle returnMenuBtn;
     private int hoveredOverlayBtn = -1;
+    private boolean isReturnMenuHovered = false;
 
-    public MainGamePanel(DataManager dataManager, AudioEngine audioEngine, AchievementManager achievementManager, String currentLang, GameListener listener) {
+    public MainGamePanel(DataManager dataManager, AudioEngine audioEngine, SaveManager saveManager, AchievementManager achievementManager, String currentLang, GameListener listener) {
         this.dataManager = dataManager;
         this.audioEngine = audioEngine;
+        this.saveManager = saveManager;
         this.achievementManager = achievementManager;
         this.currentLang = currentLang;
         this.listener = listener;
@@ -68,21 +73,30 @@ public class MainGamePanel {
     public void initGame() {
         physicsEngine = new PhysicsEngine(dataManager.getGravity(), dataManager.getBounceDamping());
         mergeSystem = new MergeSystem(dataManager);
-        dangerSystem = new DangerSystem(dataManager.getDangerTimeSeconds());
+        dangerSystem = new DangerSystem(5.0); // Enforce exactly 5.0 seconds as requested
         particleSystem = new ParticleSystem();
 
         objects.clear();
         score = 0;
+        highScore = saveManager.getHighScore();
         isPaused = false;
         isGameOver = false;
+        dropCooldown = 0.0;
 
         nextSpawnConfig = getRandomSpawnConfig();
         prepareNextSpawn();
     }
 
     private ObjectConfig getRandomSpawnConfig() {
-        // Levels 1 to 5 for initial spawn
-        int level = 1 + rand.nextInt(5);
+        boolean danger = (dangerSystem != null && dangerSystem.isDangerActive());
+        int level;
+        if (danger && rand.nextDouble() < 0.6) {
+            // Troll drop: High chance of giving a terrible drop when near losing
+            level = rand.nextBoolean() ? 1 : (4 + rand.nextInt(3));
+        } else {
+            // Smart drop based on board state logic
+            level = 1 + rand.nextInt(5);
+        }
         return dataManager.getObjectConfigByLevel(level);
     }
 
@@ -99,10 +113,14 @@ public class MainGamePanel {
     public void update(double dt, int screenWidth, int screenHeight) {
         // Calculate dynamic bucket placement
         bucketWidth = 460;
-        bucketHeight = Math.min(580, screenHeight - 140);
+        bucketHeight = Math.min(650, screenHeight - 160);
         bucketX = (screenWidth - bucketWidth) / 2.0;
-        bucketY = 100;
-        spawnY = bucketY - 40;
+        bucketY = 120;
+        spawnY = bucketY - 50;
+
+        if (dropCooldown > 0) {
+            dropCooldown -= dt;
+        }
 
         if (isPaused || isGameOver) return;
 
@@ -134,7 +152,10 @@ public class MainGamePanel {
 
         for (MergeSystem.MergeEvent event : mergeEvents) {
             score += event.scoreGained;
-            if (score > highScore) highScore = score;
+            if (score > highScore) {
+                highScore = score;
+                saveManager.setHighScore(highScore);
+            }
 
             // FX
             particleSystem.spawnMergeBurst(event.x, event.y, event.newConfig.color, 18 + event.newLevel * 2);
@@ -160,12 +181,16 @@ public class MainGamePanel {
         if (dangerSystem.isDangerActive() && !wasDanger) {
             audioEngine.playDangerSound();
             particleSystem.spawnFloatingText(bucketX + bucketWidth / 2.0, dangerY - 20, "TEHLİKE!", new Color(255, 51, 102), 26);
+            if (rand.nextDouble() < 0.4) {
+                particleSystem.spawnFloatingText(bucketX + bucketWidth / 2.0, dangerY - 60, "Buraya kadar mı cidden? 🤡", new Color(255, 100, 100), 20);
+            }
         }
 
         if (dangerSystem.isGameOver() && !isGameOver) {
             isGameOver = true;
             audioEngine.playGameOverSound();
             particleSystem.triggerScreenShake(12.0, 0.6);
+            saveManager.incrementTotalGames();
         }
 
         // 6. Particle & Toasts Update
@@ -175,10 +200,21 @@ public class MainGamePanel {
 
     public void mouseMoved(Point p) {
         aimX = p.x;
+        
+        if (returnMenuBtn != null) {
+            isReturnMenuHovered = returnMenuBtn.contains(p);
+        }
+        
         updateOverlayHover(p);
     }
 
     public void mousePressed(Point p) {
+        if (returnMenuBtn != null && returnMenuBtn.contains(p)) {
+            audioEngine.playButtonClickSound();
+            listener.onReturnToMenu();
+            return;
+        }
+
         if (isPaused || isGameOver) {
             handleOverlayClick(p);
             return;
@@ -206,12 +242,17 @@ public class MainGamePanel {
     }
 
     private void dropObject() {
+        if (dropCooldown > 0) return; // Prevent spam
+
         if (currentSpawnObj != null && !currentSpawnObj.isDropping) {
             currentSpawnObj.isDropping = true;
             objects.add(currentSpawnObj);
             audioEngine.playDropSound();
 
             currentSpawnObj = null;
+            dropCooldown = 0.65; // 0.65s cooldown
+
+            if (dangerSystem != null) dangerSystem.onObjectDropped();
 
             // Schedule next object spawn after brief delay
             prepareNextSpawn();
@@ -227,10 +268,10 @@ public class MainGamePanel {
         g2d.setColor(new Color(18, 19, 28));
         g2d.fillRect(-50, -50, screenWidth + 100, screenHeight + 100);
 
-        // 1. Draw Score Panel Header (Top-Left)
-        drawScoreHeader(g2d);
+        // 1. Draw Score Panel Header (Top-Center)
+        drawScoreHeader(g2d, screenWidth);
 
-        // 2. Draw Next Object Preview Box (Top-Right)
+        // 2. Draw Next Object Preview Box (Middle-Right)
         drawNextPreview(g2d, screenWidth);
 
         // 3. Draw Game Container Bucket
@@ -256,6 +297,24 @@ public class MainGamePanel {
 
         g2d.setTransform(oldTransform);
 
+        // Draw Return to Menu Button (Top Right)
+        int rBtnW = 140; int rBtnH = 36;
+        int rBtnX = screenWidth - rBtnW - 20;
+        int rBtnY = 20;
+        returnMenuBtn = new Rectangle(rBtnX, rBtnY, rBtnW, rBtnH);
+        
+        g2d.setColor(isReturnMenuHovered ? new Color(136, 192, 208) : new Color(59, 66, 82));
+        g2d.fillRoundRect(rBtnX, rBtnY, rBtnW, rBtnH, 8, 8);
+        g2d.setColor(isReturnMenuHovered ? Color.WHITE : new Color(129, 161, 193));
+        g2d.setStroke(new BasicStroke(1.5f));
+        g2d.drawRoundRect(rBtnX, rBtnY, rBtnW, rBtnH, 8, 8);
+
+        g2d.setFont(new Font("SansSerif", Font.BOLD, 14));
+        g2d.setColor(isReturnMenuHovered ? new Color(30, 32, 48) : Color.WHITE);
+        String rMenuStr = dataManager.getLocalizedString(currentLang, "ui", "back_to_menu");
+        FontMetrics rfm = g2d.getFontMetrics();
+        g2d.drawString(rMenuStr, rBtnX + (rBtnW - rfm.stringWidth(rMenuStr)) / 2, rBtnY + (rBtnH + rfm.getAscent() - rfm.getDescent()) / 2);
+
         // 7. Draw Pause / Game Over Overlays
         if (isPaused) {
             drawPauseOverlay(g2d, screenWidth, screenHeight);
@@ -264,28 +323,38 @@ public class MainGamePanel {
         }
     }
 
-    private void drawScoreHeader(Graphics2D g2d) {
-        int x = 40;
-        int y = 30;
+    private void drawScoreHeader(Graphics2D g2d, int screenWidth) {
+        int cx = screenWidth / 2;
+        int y = 50;
 
+        // High Score (Small, Yellow Trophy)
         g2d.setFont(new Font("SansSerif", Font.BOLD, 14));
-        g2d.setColor(new Color(143, 188, 187));
-        g2d.drawString(dataManager.getLocalizedString(currentLang, "ui", "score").toUpperCase(), x, y);
-
-        g2d.setFont(new Font("SansSerif", Font.BOLD, 32));
-        g2d.setColor(Color.WHITE);
-        g2d.drawString(String.valueOf(score), x, y + 32);
-
-        g2d.setFont(new Font("SansSerif", Font.BOLD, 12));
         g2d.setColor(new Color(235, 203, 139));
-        g2d.drawString(dataManager.getLocalizedString(currentLang, "ui", "high_score").toUpperCase() + ": " + highScore, x, y + 54);
+        String hsStr = "🏆 " + highScore;
+        FontMetrics fm2 = g2d.getFontMetrics();
+        g2d.drawString(hsStr, cx - fm2.stringWidth(hsStr)/2, y - 25);
+
+        // Current Score (Bold & White)
+        g2d.setFont(new Font("SansSerif", Font.BOLD, 52));
+        g2d.setColor(Color.WHITE);
+        String scoreStr = String.valueOf(score);
+        FontMetrics fm1 = g2d.getFontMetrics();
+        g2d.drawString(scoreStr, cx - fm1.stringWidth(scoreStr)/2, y + 25);
     }
 
     private void drawNextPreview(Graphics2D g2d, int screenWidth) {
+        Object enablePanelObj = dataManager.getGameIdentity().get("enable_next_ball_panel");
+        boolean showNext = (enablePanelObj != null && enablePanelObj.toString().equals("true"));
+        
+        if (!showNext) return;
+
         int boxW = 120;
-        int boxH = 90;
-        int boxX = screenWidth - boxW - 40;
-        int boxY = 25;
+        int boxH = 100;
+        int boxX = (int)(bucketX + bucketWidth + 40);
+        int boxY = (int)(bucketY + bucketHeight / 2 - boxH / 2);
+
+        // Prevent drawing off-screen if window is too small
+        if (boxX + boxW > screenWidth) return;
 
         g2d.setColor(new Color(46, 52, 64, 200));
         g2d.fillRoundRect(boxX, boxY, boxW, boxH, 14, 14);
@@ -301,7 +370,7 @@ public class MainGamePanel {
 
         if (nextSpawnConfig != null) {
             double previewX = boxX + boxW / 2.0;
-            double previewY = boxY + 54;
+            double previewY = boxY + 60;
             GameObject dummy = new GameObject(previewX, previewY, nextSpawnConfig);
             dummy.scaleAnim = 0.8;
             dummy.draw(g2d);
