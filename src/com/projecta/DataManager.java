@@ -18,6 +18,7 @@ public class DataManager {
     private boolean isProductionMode = false;
     private File rootDir;
     private final Map<String, String> fileContents = new HashMap<>();
+    private Map<String, Object> gameIdentity = new HashMap<>();
 
     private double gravity = 9.81;
     private double bounceDamping = 0.4;
@@ -108,6 +109,7 @@ public class DataManager {
     private void loadFromTomlFiles(File rootDir) {
         String[] relativePaths = {
             "version.toml",
+            "game_identity.toml",
             "common/objects.toml",
             "common/pyhsics.toml",
             "common/achievements.toml",
@@ -133,6 +135,19 @@ public class DataManager {
 
     @SuppressWarnings("unchecked")
     private void parseAllConfigs() {
+<<<<<<< Updated upstream
+=======
+        // 0. Game Identity
+        String identityToml = fileContents.getOrDefault("game_identity.toml", "");
+        if (!identityToml.isEmpty()) {
+            gameIdentity = TomlParser.parse(identityToml);
+        } else {
+            gameIdentity.put("title", "Project A");
+            gameIdentity.put("version", "1.0.0");
+            gameIdentity.put("enable_next_ball_panel", true);
+        }
+        // 1. Objects & Physics Settings
+>>>>>>> Stashed changes
         String objectsToml = fileContents.getOrDefault("common/objects.toml", "");
         Map<String, Object> parsedObjects = TomlParser.parse(objectsToml);
 
@@ -283,6 +298,7 @@ public class DataManager {
 
     public File getRootDir() { return rootDir; }
     public boolean isProductionMode() { return isProductionMode; }
+    public Map<String, Object> getGameIdentity() { return gameIdentity; }
     public double getGravity() { return gravity; }
     public double getBounceDamping() { return bounceDamping; }
     public double getDangerTimeSeconds() { return dangerTimeSeconds; }
