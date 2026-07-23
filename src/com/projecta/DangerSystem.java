@@ -30,8 +30,7 @@ public class DangerSystem {
         for (GameObject obj : objects) {
             if (!obj.isDropping) continue;
             if (obj.y - obj.radius < dangerY) {
-                double speed = Math.sqrt(obj.vx * obj.vx + obj.vy * obj.vy);
-                if (speed < SETTLE_VELOCITY_THRESHOLD) {
+                if (obj.hasCollided && Math.abs(obj.vy) < 15.0) {
                     settledAboveLine++;
                 }
             }

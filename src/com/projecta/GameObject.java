@@ -18,6 +18,7 @@ public class GameObject {
 
     public boolean isDropping = false;
     public boolean isSettled = false;
+    public boolean hasCollided = false;
     public double scaleAnim = 0.0; // 0.0 to 1.0 pop spawn animation
     public double squishX = 1.0;
     public double squishY = 1.0;

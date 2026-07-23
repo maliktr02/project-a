@@ -39,6 +39,7 @@ public class MainMenuPanel {
     }
 
     private final DataManager dataManager;
+    private final SaveManager saveManager;
     private final AudioEngine audioEngine;
     private final MenuListener listener;
     private String currentLang = "tr";
@@ -50,9 +51,19 @@ public class MainMenuPanel {
     private final List<Rectangle> buttonBounds = new ArrayList<>();
     private int hoveredButton = -1;
     private final String[] buttonKeys = new String[]{"main_menu_play", "main_menu_settings", "main_menu_achievements", "main_menu_quit"};
+    
+    // Credits
+    private double creditsTimer = 0;
+    private int currentCreditIndex = 1;
 
-    public MainMenuPanel(DataManager dataManager, AudioEngine audioEngine, String currentLang, MenuListener listener) {
+    // Konami Code
+    private final int[] konamiCode = {KeyEvent.VK_UP, KeyEvent.VK_UP, KeyEvent.VK_DOWN, KeyEvent.VK_DOWN, KeyEvent.VK_LEFT, KeyEvent.VK_RIGHT, KeyEvent.VK_LEFT, KeyEvent.VK_RIGHT, KeyEvent.VK_B, KeyEvent.VK_A};
+    private int konamiIndex = 0;
+    private boolean konamiUnlocked = false;
+
+    public MainMenuPanel(DataManager dataManager, SaveManager saveManager, AudioEngine audioEngine, String currentLang, MenuListener listener) {
         this.dataManager = dataManager;
+        this.saveManager = saveManager;
         this.audioEngine = audioEngine;
         this.currentLang = currentLang;
         this.listener = listener;
@@ -82,6 +93,26 @@ public class MainMenuPanel {
     public void update(double dt, int width, int height) {
         for (MenuParticle p : bgParticles) {
             p.update(dt, width, height);
+        }
+        
+        creditsTimer += dt;
+        if (creditsTimer > 4.0) {
+            creditsTimer = 0;
+            currentCreditIndex++;
+            if (currentCreditIndex > 5) currentCreditIndex = 1; // loop 1-5
+        }
+    }
+
+    public void keyPressed(int keyCode) {
+        if (konamiCode[konamiIndex] == keyCode) {
+            konamiIndex++;
+            if (konamiIndex == konamiCode.length) {
+                konamiUnlocked = true;
+                konamiIndex = 0;
+                audioEngine.playTauntSound();
+            }
+        } else {
+            konamiIndex = 0;
         }
     }
 
@@ -131,11 +162,11 @@ public class MainMenuPanel {
 
         // Main Title Header
         g2d.setColor(Color.WHITE);
-        g2d.setFont(new Font("SansSerif", Font.BOLD, 54));
+        g2d.setFont(new Font("SansSerif", Font.BOLD, 68));
         FontMetrics titleFm = g2d.getFontMetrics();
         String titleStr = "PROJECT A";
         int titleX = (width - titleFm.stringWidth(titleStr)) / 2;
-        int titleY = height / 4;
+        int titleY = height / 3 - 40;
 
         // Glowing title text
         g2d.setColor(new Color(136, 192, 208, 100));
@@ -144,32 +175,16 @@ public class MainMenuPanel {
         g2d.setColor(new Color(236, 239, 244));
         g2d.drawString(titleStr, titleX, titleY);
 
-        // Subtitle
-        g2d.setFont(new Font("SansSerif", Font.PLAIN, 20));
-        g2d.setColor(new Color(216, 222, 233));
-        String subStr = "2048 Physics Merge Puzzle";
-        FontMetrics subFm = g2d.getFontMetrics();
-        g2d.drawString(subStr, (width - subFm.stringWidth(subStr)) / 2, titleY + 35);
-
-        // Dev Mode / Prod Mode Status Badge
-        boolean isProd = dataManager.isProductionMode();
-        String modeText = isProd ? "PRODUCTION DATA (data.bin)" : "DEVELOPER DATA (.toml)";
-        Color modeColor = isProd ? new Color(163, 190, 140) : new Color(235, 203, 139);
-        g2d.setFont(new Font("SansSerif", Font.BOLD, 12));
-        FontMetrics modeFm = g2d.getFontMetrics();
-        g2d.setColor(modeColor);
-        g2d.drawString(modeText, (width - modeFm.stringWidth(modeText)) / 2, titleY + 60);
-
         // Glassmorphic Menu Card
         int cardW = 340;
         int cardH = 260;
         int cardX = (width - cardW) / 2;
-        int cardY = titleY + 90;
+        int cardY = titleY + 50;
 
-        g2d.setColor(new Color(46, 52, 64, 180));
+        g2d.setColor(new Color(36, 42, 54, 180));
         g2d.fillRoundRect(cardX, cardY, cardW, cardH, 20, 20);
-        g2d.setColor(new Color(76, 86, 106));
-        g2d.setStroke(new BasicStroke(2.0f));
+        g2d.setColor(new Color(76, 86, 106, 100));
+        g2d.setStroke(new BasicStroke(1.5f));
         g2d.drawRoundRect(cardX, cardY, cardW, cardH, 20, 20);
 
         // Buttons rendering
@@ -190,13 +205,13 @@ public class MainMenuPanel {
             if (isHovered) {
                 g2d.setColor(new Color(136, 192, 208));
             } else {
-                g2d.setColor(new Color(59, 66, 82));
+                g2d.setColor(new Color(59, 66, 82, 180));
             }
             g2d.fillRoundRect(btnX, btnY, btnW, btnH, 12, 12);
 
             // Button border
-            g2d.setColor(isHovered ? Color.WHITE : new Color(129, 161, 193));
-            g2d.setStroke(new BasicStroke(1.5f));
+            g2d.setColor(isHovered ? Color.WHITE : new Color(129, 161, 193, 150));
+            g2d.setStroke(new BasicStroke(1.2f));
             g2d.drawRoundRect(btnX, btnY, btnW, btnH, 12, 12);
 
             // Button label
@@ -208,10 +223,20 @@ public class MainMenuPanel {
         }
 
         // Footer Credits
-        g2d.setFont(new Font("SansSerif", Font.PLAIN, 12));
-        g2d.setColor(new Color(143, 188, 187));
-        String credits = dataManager.getLocalizedString(currentLang, "credits", "credits_1") + " | " + dataManager.getLocalizedString(currentLang, "credits", "credits_3");
+        g2d.setFont(new Font("SansSerif", Font.PLAIN, 14));
+        g2d.setColor(new Color(143, 188, 187, 180));
+        String credits = dataManager.getLocalizedString(currentLang, "credits", "credits_" + currentCreditIndex);
+        if (credits == null || credits.equals("credits_" + currentCreditIndex)) {
+            credits = "Project A - Amyun";
+        }
         FontMetrics credFm = g2d.getFontMetrics();
-        g2d.drawString(credits, (width - credFm.stringWidth(credits)) / 2, height - 25);
+        g2d.drawString(credits, (width - credFm.stringWidth(credits)) / 2, height - 30);
+        
+        if (konamiUnlocked) {
+            String secretMsg = dataManager.getLocalizedString(currentLang, "secret", "konami_unlocked");
+            if (secretMsg.equals("konami_unlocked")) secretMsg = "DEVELOPER MODE UNLOCKED: YOU ARE A NERD";
+            g2d.setColor(new Color(235, 203, 139));
+            g2d.drawString(secretMsg, (width - credFm.stringWidth(secretMsg)) / 2, height - 60);
+        }
     }
 }

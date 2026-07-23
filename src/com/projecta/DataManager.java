@@ -79,25 +79,34 @@ public class DataManager {
     }
 
     private void loadFromTomlFiles(File rootDir) {
-        String[] relativePaths = new String[]{
-            "version.toml",
-            "common/objects.toml",
-            "common/pyhsics.toml",
-            "common/achievements.toml",
-            "config/settings.toml",
-            "config/ui_theme.toml",
-            "locales/tr.toml",
-            "locales/en.toml"
-        };
+        File versionFile = new File(rootDir, "version.toml");
+        if (versionFile.exists()) {
+            try {
+                fileContents.put("version.toml", new String(Files.readAllBytes(versionFile.toPath()), StandardCharsets.UTF_8));
+            } catch (IOException ignored) {}
+        }
 
-        for (String relPath : relativePaths) {
-            File f = new File(rootDir, relPath);
-            if (f.exists()) {
+        String[] dirsToScan = new String[]{"common", "config", "locales"};
+        for (String dirName : dirsToScan) {
+            File dir = new File(rootDir, dirName);
+            if (dir.exists() && dir.isDirectory()) {
+                scanTomlDir(dir, dirName + "/");
+            }
+        }
+    }
+
+    private void scanTomlDir(File dir, String prefix) {
+        File[] children = dir.listFiles();
+        if (children == null) return;
+        for (File f : children) {
+            if (f.isDirectory()) {
+                scanTomlDir(f, prefix + f.getName() + "/");
+            } else if (f.getName().endsWith(".toml")) {
                 try {
                     String content = new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8);
-                    fileContents.put(relPath, content);
+                    fileContents.put(prefix + f.getName(), content);
                 } catch (IOException e) {
-                    System.err.println("[DataManager] Error reading " + relPath + ": " + e.getMessage());
+                    GameLogger.get().error("DataManager", "Error reading " + f.getName(), e);
                 }
             }
         }
@@ -105,25 +114,30 @@ public class DataManager {
 
     @SuppressWarnings("unchecked")
     private void parseAllConfigs() {
-        // 1. Objects & Physics Settings
-        String objectsToml = fileContents.getOrDefault("common/objects.toml", "");
-        Map<String, Object> parsedObjects = TomlParser.parse(objectsToml);
+        // Combine all common configs
+        Map<String, Object> commonMap = new HashMap<>();
+        for (Map.Entry<String, String> entry : fileContents.entrySet()) {
+            if (entry.getKey().startsWith("common/")) {
+                Map<String, Object> parsed = TomlParser.parse(entry.getValue());
+                deepMerge(commonMap, parsed);
+            }
+        }
 
-        gravity = TomlParser.getDouble(parsedObjects, "_settings.gravity", 9.81);
-        bounceDamping = TomlParser.getDouble(parsedObjects, "_settings.bounce_damping", 0.4);
-        dangerTimeSeconds = TomlParser.getDouble(parsedObjects, "_settings.danger_time_seconds", 3.0);
-        maxSpawnValue = TomlParser.getLong(parsedObjects, "_settings.max_spawn_value", 256);
+        gravity = TomlParser.getDouble(commonMap, "_settings.gravity", 9.81);
+        bounceDamping = TomlParser.getDouble(commonMap, "_settings.bounce_damping", 0.4);
+        dangerTimeSeconds = TomlParser.getDouble(commonMap, "_settings.danger_time_seconds", 3.0);
+        maxSpawnValue = TomlParser.getLong(commonMap, "_settings.max_spawn_value", 256);
 
         objectConfigs.clear();
         for (int i = 1; i <= 12; i++) {
             String key = "objects.object_" + i;
-            if (TomlParser.getNestedValue(parsedObjects, key) != null) {
-                String id = TomlParser.getString(parsedObjects, key + ".id", "object_" + i);
-                String nameKey = TomlParser.getString(parsedObjects, key + ".name", "object_" + i + "_name");
-                long val = TomlParser.getLong(parsedObjects, key + ".value", (long) Math.pow(2, i - 1));
-                double mass = TomlParser.getDouble(parsedObjects, key + ".mass", 1.0 + i * 0.7);
-                long score = TomlParser.getLong(parsedObjects, key + ".score", val * 2);
-                String colorRgb = TomlParser.getString(parsedObjects, key + ".color_rgb", "238, 228, 218");
+            if (TomlParser.getNestedValue(commonMap, key) != null) {
+                String id = TomlParser.getString(commonMap, key + ".id", "object_" + i);
+                String nameKey = TomlParser.getString(commonMap, key + ".name", "object_" + i + "_name");
+                long val = TomlParser.getLong(commonMap, key + ".value", (long) Math.pow(2, i - 1));
+                double mass = TomlParser.getDouble(commonMap, key + ".mass", 1.0 + i * 0.7);
+                long score = TomlParser.getLong(commonMap, key + ".score", val * 2);
+                String colorRgb = TomlParser.getString(commonMap, key + ".color_rgb", "238, 228, 218");
                 Color col = parseRgbColor(colorRgb);
 
                 // Radius scaling: base 22px up to ~72px for level 12
@@ -134,14 +148,33 @@ public class DataManager {
         }
 
         // 2. Settings & UI Theme
-        settingsMap = TomlParser.parse(fileContents.getOrDefault("config/settings.toml", ""));
-        themeMap = TomlParser.parse(fileContents.getOrDefault("config/ui_theme.toml", ""));
+        settingsMap = new HashMap<>();
+        themeMap = new HashMap<>();
+        for (Map.Entry<String, String> entry : fileContents.entrySet()) {
+            if (entry.getKey().startsWith("config/")) {
+                Map<String, Object> parsed = TomlParser.parse(entry.getValue());
+                if (entry.getKey().contains("settings")) deepMerge(settingsMap, parsed);
+                else deepMerge(themeMap, parsed);
+            }
+        }
 
         // 3. Achievements
-        Map<String, Object> achMap = TomlParser.parse(fileContents.getOrDefault("common/achievements.toml", ""));
-        Object achs = achMap.get("achievements");
+        Object achs = commonMap.get("achievements");
         if (achs instanceof Map) {
             achievements.putAll((Map<String, Map<String, Object>>) achs);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void deepMerge(Map<String, Object> target, Map<String, Object> source) {
+        for (Map.Entry<String, Object> entry : source.entrySet()) {
+            String key = entry.getKey();
+            Object value = entry.getValue();
+            if (value instanceof Map && target.containsKey(key) && target.get(key) instanceof Map) {
+                deepMerge((Map<String, Object>) target.get(key), (Map<String, Object>) value);
+            } else {
+                target.put(key, value);
+            }
         }
     }
 

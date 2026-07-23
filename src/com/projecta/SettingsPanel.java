@@ -14,6 +14,7 @@ public class SettingsPanel {
     }
 
     private final DataManager dataManager;
+    private final SaveManager saveManager;
     private final AudioEngine audioEngine;
     private final SettingsListener listener;
 
@@ -21,16 +22,24 @@ public class SettingsPanel {
     private boolean isFullscreen = false;
     private int sfxVolume = 80;
     private int musicVolume = 70;
+    private boolean showNextObject = true;
+    private boolean realisticPhysics = false;
 
     private final List<Rectangle> buttonBounds = new ArrayList<>();
     private int hoveredButton = -1;
 
-    public SettingsPanel(DataManager dataManager, AudioEngine audioEngine, String currentLang, boolean isFullscreen, SettingsListener listener) {
+    public SettingsPanel(DataManager dataManager, SaveManager saveManager, AudioEngine audioEngine, String currentLang, boolean isFullscreen, SettingsListener listener) {
         this.dataManager = dataManager;
+        this.saveManager = saveManager;
         this.audioEngine = audioEngine;
         this.currentLang = currentLang;
         this.isFullscreen = isFullscreen;
         this.listener = listener;
+
+        this.sfxVolume = saveManager.getSettingInt("sfx_volume", 80);
+        this.musicVolume = saveManager.getSettingInt("music_volume", 70);
+        this.showNextObject = saveManager.getSettingBool("show_next_object", true);
+        this.realisticPhysics = saveManager.getSettingBool("realistic_physics", false);
     }
 
     public void setFullscreenState(boolean fullscreen) {
@@ -58,6 +67,7 @@ public class SettingsPanel {
                 switch (i) {
                     case 0: // Display Mode Toggle
                         isFullscreen = !isFullscreen;
+                        saveManager.setSetting("fullscreen", isFullscreen);
                         listener.onToggleFullscreen();
                         break;
                     case 1: // Language Toggle
@@ -65,14 +75,24 @@ public class SettingsPanel {
                         listener.onToggleLanguage();
                         break;
                     case 2: // SFX Volume toggle (- / +)
-                        sfxVolume = (sfxVolume >= 100) ? 0 : sfxVolume + 20;
+                        sfxVolume += 20;
+                        if(sfxVolume > 100) sfxVolume = 0;
                         listener.onVolumeChanged(sfxVolume, musicVolume);
                         break;
                     case 3: // Music Volume toggle (- / +)
-                        musicVolume = (musicVolume >= 100) ? 0 : musicVolume + 20;
+                        musicVolume += 20;
+                        if(musicVolume > 100) musicVolume = 0;
                         listener.onVolumeChanged(sfxVolume, musicVolume);
                         break;
-                    case 4: // Back
+                    case 4: // Show Next Object Toggle
+                        showNextObject = !showNextObject;
+                        saveManager.setSetting("show_next_object", showNextObject);
+                        break;
+                    case 5: // Physics Mode Toggle
+                        realisticPhysics = !realisticPhysics;
+                        saveManager.setSetting("realistic_physics", realisticPhysics);
+                        break;
+                    case 6: // Back
                         listener.onBack();
                         break;
                 }
@@ -94,12 +114,12 @@ public class SettingsPanel {
         g2d.drawString(title, (width - tfm.stringWidth(title)) / 2, 90);
 
         // Settings Container Card
-        int cardW = 500;
-        int cardH = 380;
+        int cardW = 540;
+        int cardH = 500;
         int cardX = (width - cardW) / 2;
         int cardY = 130;
 
-        g2d.setColor(new Color(46, 52, 64, 200));
+        g2d.setColor(new Color(36, 42, 54, 210));
         g2d.fillRoundRect(cardX, cardY, cardW, cardH, 20, 20);
         g2d.setColor(new Color(76, 86, 106));
         g2d.setStroke(new BasicStroke(2.0f));
@@ -108,26 +128,37 @@ public class SettingsPanel {
         buttonBounds.clear();
 
         // 1. Display Mode Option
-        int rowY = cardY + 45;
+        int rowY = cardY + 40;
         drawSettingRow(g2d, cardX + 30, rowY, dataManager.getLocalizedString(currentLang, "ui", "display_mode"), 
             isFullscreen ? dataManager.getLocalizedString(currentLang, "ui", "fullscreen") : dataManager.getLocalizedString(currentLang, "ui", "windowed"), 0);
 
         // 2. Language Option
-        rowY += 60;
+        rowY += 55;
         drawSettingRow(g2d, cardX + 30, rowY, dataManager.getLocalizedString(currentLang, "main_menu", "main_menu_language"),
             currentLang.equals("tr") ? "Türkçe (TR)" : "English (EN)", 1);
 
         // 3. SFX Volume Option
-        rowY += 60;
+        rowY += 55;
         drawSettingRow(g2d, cardX + 30, rowY, dataManager.getLocalizedString(currentLang, "ui", "sfx_volume"),
             sfxVolume + "%", 2);
 
         // 4. Music Volume Option
-        rowY += 60;
+        rowY += 55;
         drawSettingRow(g2d, cardX + 30, rowY, dataManager.getLocalizedString(currentLang, "ui", "music_volume"),
             musicVolume + "%", 3);
 
-        // 5. Back Button
+        // 5. Show Next Object Toggle
+        rowY += 55;
+        drawSettingRow(g2d, cardX + 30, rowY, dataManager.getLocalizedString(currentLang, "ui", "show_next"),
+            showNextObject ? dataManager.getLocalizedString(currentLang, "ui", "on") : dataManager.getLocalizedString(currentLang, "ui", "off"), 4);
+
+        // 6. Physics Mode Toggle
+        rowY += 55;
+        drawSettingRow(g2d, cardX + 30, rowY, dataManager.getLocalizedString(currentLang, "ui", "physics_mode"),
+            realisticPhysics ? dataManager.getLocalizedString(currentLang, "ui", "realistic") : dataManager.getLocalizedString(currentLang, "ui", "arcade"), 5);
+
+
+        // 7. Back Button
         int btnW = 200;
         int btnH = 44;
         int btnX = (width - btnW) / 2;
@@ -135,7 +166,7 @@ public class SettingsPanel {
         Rectangle backRect = new Rectangle(btnX, btnY, btnW, btnH);
         buttonBounds.add(backRect);
 
-        boolean isHovered = (hoveredButton == 4);
+        boolean isHovered = (hoveredButton == 6);
         g2d.setColor(isHovered ? new Color(136, 192, 208) : new Color(59, 66, 82));
         g2d.fillRoundRect(btnX, btnY, btnW, btnH, 12, 12);
         g2d.setColor(isHovered ? Color.WHITE : new Color(129, 161, 193));
