@@ -5,15 +5,12 @@ echo ===================================================
 echo   PROJECT A - SYSTEM CHECK
 echo ===================================================
 
-REM ----------------------------------------------------
-REM 1. JRE KONTROLÜ
-REM ----------------------------------------------------
 where java.exe >nul 2>nul
 if not errorlevel 1 goto FOUND_JRE
 
 if exist "tools\jre\bin\java.exe" goto FOUND_LOCAL_JRE
 
-echo [WARNING] Java Runtime (JRE) not found!
+echo [WARNING] Java Runtime (JRE) not found
 echo [INFO] Downloading JRE...
 
 if not exist "tools\temp" mkdir "tools\temp"
@@ -24,35 +21,28 @@ set "JRE_INSTALLER=tools\temp\jre_installer.exe"
 powershell -Command "Invoke-WebRequest -Uri '%JRE_URL%' -OutFile '%JRE_INSTALLER%'"
 
 if not exist "%JRE_INSTALLER%" (
-    echo [ERROR] Failed to download JRE! Check internet connection.
-    pause
-    exit /b 1
+    echo [ERROR] Failed to download JRE. Check internet connection.
+    goto EXIT_WITH_PAUSE
 )
 
 echo [INFO] Installing JRE...
 start /wait "" "%JRE_INSTALLER%" /s
 if exist "tools\temp" rmdir /s /q "tools\temp"
-echo [SUCCESS] JRE installed successfully!
+echo [SUCCESS] JRE installed successfully.
 
 :FOUND_JRE
-echo [OK] Java Runtime detected on system PATH!
+echo [OK] Java Runtime detected on system PATH.
 goto CHECK_JDK
 
 :FOUND_LOCAL_JRE
-echo [OK] Local Java Runtime detected in tools\jre!
+echo [OK] Local Java Runtime detected in tools\jre.
 goto CHECK_JDK
 
-REM ----------------------------------------------------
-REM 2. JDK KONTROLÜ
-REM ----------------------------------------------------
 :CHECK_JDK
 where javac.exe >nul 2>nul
-if not errorlevel 1 (
-    echo [OK] Java Development Kit (JDK) detected!
-    goto RUN_GAME
-)
+if not errorlevel 1 goto FOUND_JDK
 
-echo [WARNING] JDK (javac) not found on system!
+echo [WARNING] JDK (javac) not found on system.
 echo [INFO] Downloading Oracle JDK 26...
 
 if not exist "tools\temp" mkdir "tools\temp"
@@ -63,23 +53,31 @@ set "JDK_INSTALLER=tools\temp\jdk_installer.exe"
 powershell -Command "Invoke-WebRequest -Uri '%JDK_URL%' -OutFile '%JDK_INSTALLER%'"
 
 if not exist "%JDK_INSTALLER%" (
-    echo [ERROR] Failed to download JDK!
+    echo [ERROR] Failed to download JDK.
     goto RUN_GAME
 )
 
 echo [INFO] Launching JDK 26 Installer...
 start /wait "" "%JDK_INSTALLER%"
 if exist "tools\temp" rmdir /s /q "tools\temp"
-echo [SUCCESS] JDK Installation complete!
+echo [SUCCESS] JDK Installation complete.
+goto RUN_GAME
 
-REM ----------------------------------------------------
-REM 3. OYUNU BAŞLATMA (ProjectA.jar)
-REM ----------------------------------------------------
+:FOUND_JDK
+echo [OK] Java Development Kit (JDK) detected.
+goto RUN_GAME
+
 :RUN_GAME
 echo.
 echo ===================================================
 echo   LAUNCHING PROJECT A
 echo ===================================================
+
+if not exist "ProjectA.jar" (
+    echo [NOTE] ProjectA.jar not found in current folder.
+    echo [INFO] System checks completed successfully.
+    goto EXIT_WITH_PAUSE
+)
 
 if exist "tools\jre\bin\java.exe" (
     "tools\jre\bin\java.exe" -jar ProjectA.jar
@@ -87,4 +85,10 @@ if exist "tools\jre\bin\java.exe" (
     java -jar ProjectA.jar
 )
 
-pause
+:EXIT_WITH_PAUSE
+echo.
+echo ===================================================
+echo   PROCESS COMPLETED
+echo ===================================================
+echo Kapatmak icin bir tusa basin...
+pause >nul
