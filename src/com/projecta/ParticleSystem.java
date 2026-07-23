@@ -75,7 +75,6 @@ public class ParticleSystem {
     private double shakeX = 0, shakeY = 0;
     private double shakeIntensity = 0;
     private double shakeDuration = 0;
-    private double shakeMaxDuration = 0;
     private double shakeDecay = 0.92;
 
     public void spawnMergeBurst(double x, double y, Color color, int count) {
@@ -101,7 +100,6 @@ public class ParticleSystem {
     public void triggerScreenShake(double intensity, double duration) {
         this.shakeIntensity = Math.max(this.shakeIntensity, intensity);
         this.shakeDuration = Math.max(this.shakeDuration, duration);
-        this.shakeMaxDuration = Math.max(this.shakeMaxDuration, duration);
     }
 
     public void update(double dt) {
@@ -113,12 +111,11 @@ public class ParticleSystem {
 
         if (shakeDuration > 0) {
             shakeDuration -= dt;
-            double progress = Math.max(0, shakeMaxDuration > 0 ? shakeDuration / shakeMaxDuration : 0);
-            double damp = progress * progress; // ease out quadratically
-            double t = (shakeMaxDuration - shakeDuration) * 40.0;
-            shakeX = Math.sin(t * 7.3) * shakeIntensity * damp;
-            shakeY = Math.cos(t * 5.1) * shakeIntensity * 0.7 * damp;
-            if (shakeDuration <= 0) { shakeX = 0; shakeY = 0; shakeIntensity = 0; shakeMaxDuration = 0; }
+            double t = shakeDuration * 40.0;
+            shakeX = Math.sin(t * 7.3) * shakeIntensity * (shakeDuration / 0.3);
+            shakeY = Math.cos(t * 5.1) * shakeIntensity * 0.7 * (shakeDuration / 0.3);
+            shakeIntensity *= Math.pow(shakeDecay, dt * 60);
+            if (shakeDuration <= 0) { shakeX = 0; shakeY = 0; shakeIntensity = 0; }
         }
     }
 

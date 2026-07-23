@@ -14,7 +14,6 @@ public class MainGamePanel {
     }
 
     private final DataManager dataManager;
-    private final SaveManager saveManager;
     private final AudioEngine audioEngine;
     private final AchievementManager achievementManager;
     private final GameListener listener;
@@ -52,9 +51,8 @@ public class MainGamePanel {
     private Rectangle resumeBtn, restartBtn, menuBtn;
     private int hoveredOverlayBtn = -1;
 
-    public MainGamePanel(DataManager dataManager, SaveManager saveManager, AudioEngine audioEngine, AchievementManager achievementManager, String currentLang, GameListener listener) {
+    public MainGamePanel(DataManager dataManager, AudioEngine audioEngine, AchievementManager achievementManager, String currentLang, GameListener listener) {
         this.dataManager = dataManager;
-        this.saveManager = saveManager;
         this.audioEngine = audioEngine;
         this.achievementManager = achievementManager;
         this.currentLang = currentLang;
@@ -69,8 +67,6 @@ public class MainGamePanel {
 
     public void initGame() {
         physicsEngine = new PhysicsEngine(dataManager.getGravity(), dataManager.getBounceDamping());
-        physicsEngine.configure(dataManager.getGravity(), dataManager.getBounceDamping(), 0.97, 0.999, 8);
-        physicsEngine.setRealistic(saveManager.getSettingBool("realistic_physics", false));
         mergeSystem = new MergeSystem(dataManager);
         dangerSystem = new DangerSystem(dataManager.getDangerTimeSeconds());
         particleSystem = new ParticleSystem();
@@ -85,23 +81,9 @@ public class MainGamePanel {
     }
 
     private ObjectConfig getRandomSpawnConfig() {
-        int maxLevel = saveManager.getHighestLevel();
-        if (maxLevel < 5) maxLevel = 5;
-        
-        // Spawn up to maxLevel - 3, but mostly lower levels
-        int upperLimit = Math.max(1, maxLevel - 3);
-        if (upperLimit > 7) upperLimit = 7;
-        
-        // Weighted random towards lower levels
-        int level = 1;
-        for (int i = 0; i < upperLimit; i++) {
-            if (rand.nextDouble() < 0.4) {
-                break; // Stop at this level
-            }
-            level++;
-        }
-        
-        return dataManager.getObjectConfigByLevel(Math.min(level, upperLimit));
+        // Levels 1 to 5 for initial spawn
+        int level = 1 + rand.nextInt(5);
+        return dataManager.getObjectConfigByLevel(level);
     }
 
     private void prepareNextSpawn() {
@@ -152,40 +134,23 @@ public class MainGamePanel {
 
         for (MergeSystem.MergeEvent event : mergeEvents) {
             score += event.scoreGained;
-            if (score > highScore) {
-                highScore = score;
-                saveManager.setHighScore(highScore);
-            }
+            if (score > highScore) highScore = score;
 
-            if (event.newLevel > saveManager.getHighestLevel()) {
-                saveManager.setHighestLevel(event.newLevel);
-            }
-
-            int comboCount = mergeSystem.getComboCount();
-            if (comboCount > 1) {
-                particleSystem.spawnFloatingText(event.x, event.y - 30, comboCount + "x COMBO!", new Color(235, 203, 139), 20);
-                if (comboCount == 3) {
-                    audioEngine.playTauntSound();
-                    particleSystem.spawnFloatingText(event.x, event.y - 50, dataManager.getLocalizedString(currentLang, "taunts", "taunt_1"), new Color(255, 100, 100), 24);
-                } else if (comboCount == 5) {
-                    audioEngine.playTauntSound();
-                    particleSystem.spawnFloatingText(event.x, event.y - 50, dataManager.getLocalizedString(currentLang, "taunts", "taunt_2"), new Color(255, 100, 100), 24);
-                }
-            }
-
+            // FX
             particleSystem.spawnMergeBurst(event.x, event.y, event.newConfig.color, 18 + event.newLevel * 2);
             particleSystem.spawnFloatingText(event.x, event.y - 15, "+" + event.scoreGained, event.newConfig.color.brighter(), 22);
 
             audioEngine.playMergeSound(event.newLevel);
 
-            if (comboCount >= 2) {
-                audioEngine.playComboSound(comboCount);
+            if (mergeSystem.getComboCount() >= 2) {
+                particleSystem.spawnFloatingText(event.x, event.y - 45, "KOMBO x" + mergeSystem.getComboCount(), new Color(255, 215, 0), 24);
+                audioEngine.playComboSound(mergeSystem.getComboCount());
             }
 
             particleSystem.triggerScreenShake(3.0 + event.newLevel, 0.2);
 
             // Achievements check
-            achievementManager.checkMergeAchievements(event.newLevel, comboCount, score, !dangerSystem.isDangerActive(), audioEngine);
+            achievementManager.checkMergeAchievements(event.newLevel, mergeSystem.getComboCount(), score, dangerSystem.isDangerActive(), audioEngine);
         }
 
         // 5. Danger & Game Over Check
@@ -194,16 +159,13 @@ public class MainGamePanel {
 
         if (dangerSystem.isDangerActive() && !wasDanger) {
             audioEngine.playDangerSound();
-            particleSystem.spawnFloatingText(bucketX + bucketWidth / 2.0, bucketY + dangerYOffset - 20, "TEHLİKE!", new Color(255, 51, 102), 26);
-            audioEngine.playTauntSound();
+            particleSystem.spawnFloatingText(bucketX + bucketWidth / 2.0, dangerY - 20, "TEHLİKE!", new Color(255, 51, 102), 26);
         }
 
-        if (dangerSystem.isGameOver()) {
+        if (dangerSystem.isGameOver() && !isGameOver) {
             isGameOver = true;
             audioEngine.playGameOverSound();
-            audioEngine.playTauntSound();
-            particleSystem.triggerScreenShake(8.0, 0.6);
-            saveManager.incrementTotalGames();
+            particleSystem.triggerScreenShake(12.0, 0.6);
         }
 
         // 6. Particle & Toasts Update
@@ -269,9 +231,7 @@ public class MainGamePanel {
         drawScoreHeader(g2d);
 
         // 2. Draw Next Object Preview Box (Top-Right)
-        if (saveManager.getSettingBool("show_next_object", true)) {
-            drawNextPreview(g2d, screenWidth);
-        }
+        drawNextPreview(g2d, screenWidth);
 
         // 3. Draw Game Container Bucket
         drawContainerBucket(g2d);

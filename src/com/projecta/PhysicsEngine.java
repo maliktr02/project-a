@@ -32,18 +32,6 @@ public class PhysicsEngine {
     public double getAirDrag() { return airDrag; }
     public int getSubSteps() { return subSteps; }
 
-    public void setRealistic(boolean realistic) {
-        if (realistic) {
-            this.bounceDamping = 0.55;
-            this.friction = 0.85;
-            this.subSteps = 12; // More precision
-        } else {
-            this.bounceDamping = 0.4;
-            this.friction = 0.97;
-            this.subSteps = 8;
-        }
-    }
-
     public void update(List<GameObject> objects, double dt, double boundsLeft, double boundsRight, double boundsBottom) {
         double subDt = dt / subSteps;
 
@@ -56,20 +44,12 @@ public class PhysicsEngine {
                 obj.y += obj.vy * subDt;
             }
 
-            // Spatial Optimization: 1D Sweep and Prune (Sort by X-axis minimum bound)
-            // TimSort is O(N) for nearly sorted arrays, which this usually is.
-            objects.sort((a, b) -> Double.compare(a.x - a.radius, b.x - b.radius));
-
             for (int i = 0; i < objects.size(); i++) {
                 GameObject a = objects.get(i);
                 if (!a.isDropping) continue;
                 for (int j = i + 1; j < objects.size(); j++) {
                     GameObject b = objects.get(j);
                     if (!b.isDropping) continue;
-                    
-                    // Sweep and Prune: if b's left edge is beyond a's right edge, no further objects can collide with a
-                    if (b.x - b.radius > a.x + a.radius) break;
-
                     resolveCircleCollision(a, b);
                 }
             }
@@ -90,8 +70,6 @@ public class PhysicsEngine {
         if (distSq <= 0.0001) { dx = 0.1; dy = 0.0; distSq = 0.01; }
 
         if (distSq < minDist * minDist) {
-            a.hasCollided = true;
-            b.hasCollided = true;
             double dist = Math.sqrt(distSq);
             double overlap = minDist - dist;
 
@@ -155,14 +133,12 @@ public class PhysicsEngine {
             obj.x = left + obj.radius;
             obj.vx = Math.abs(obj.vx) * bounceDamping;
             obj.angularVelocity += obj.vy * 0.03;
-            obj.hasCollided = true;
         }
 
         if (obj.x + obj.radius > right) {
             obj.x = right - obj.radius;
             obj.vx = -Math.abs(obj.vx) * bounceDamping;
             obj.angularVelocity -= obj.vy * 0.03;
-            obj.hasCollided = true;
         }
 
         if (obj.y + obj.radius > bottom) {
@@ -171,7 +147,6 @@ public class PhysicsEngine {
             obj.vx *= friction;
             if (Math.abs(obj.vy) < 10.0) obj.vy = 0;
             obj.angularVelocity *= 0.92;
-            obj.hasCollided = true;
         }
     }
 }

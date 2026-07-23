@@ -1,0 +1,32 @@
+[spawn]
+weights = "30,27,20,15,8"
+max_repeat = 2
+max_level = 5
+
+[danger]
+settle_threshold = 15.0
+min_time = 3.0
+grace_period = 1.5
+recovery_rate = 0.8
+max_time = 3.0
+
+[physics_defaults]
+gravity = 9.81
+bounce = 0.4
+friction = 0.97
+air_drag = 0.999
+sub_steps = 8
+gravity_scale = 85.0
+
+[ui]
+credits_cycle_seconds = 4.0
+intro_fallback_seconds = 3.0
+toast_duration = 3.0
+combo_window = 2.0
+shake_decay = 0.88
+
+[cringe]
+taunt_chance = 0.25
+idle_timeout = 15.0
+repeat_threshold = 3
+gameover_taunt = true

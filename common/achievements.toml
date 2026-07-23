@@ -14,6 +14,22 @@ desc_tr = "256 değerinde bir objeye ulaş"
 desc_en = "Reach a 256 value object"
 icon = "merge_256"
 
+[achievements.reach_512]
+id = "reach_512"
+name_tr = "Yarı Yolda"
+name_en = "Halfway There"
+desc_tr = "512 değerinde bir objeye ulaş"
+desc_en = "Reach a 512 value object"
+icon = "merge_512"
+
+[achievements.reach_1024]
+id = "reach_1024"
+name_tr = "Neredeyse"
+name_en = "Almost There"
+desc_tr = "1024 değerinde bir objeye ulaş"
+desc_en = "Reach a 1024 value object"
+icon = "merge_1024"
+
 [achievements.reach_2048]
 id = "reach_2048"
 name_tr = "2048 Ustası"
@@ -30,12 +46,44 @@ desc_tr = "Tek hamlede kombo birleştirme yap"
 desc_en = "Perform a combo merge in a single drop"
 icon = "combo"
 
+[achievements.combo_x5]
+id = "combo_x5"
+name_tr = "Kombo Ustası"
+name_en = "Combo Master"
+desc_tr = "5x kombo yap"
+desc_en = "Perform a 5x combo"
+icon = "combo"
+
+[achievements.combo_x10]
+id = "combo_x10"
+name_tr = "Kombo Tanrısı"
+name_en = "Combo God"
+desc_tr = "10x kombo yap"
+desc_en = "Perform a 10x combo"
+icon = "combo"
+
 [achievements.score_10k]
 id = "score_10k"
 name_tr = "Yüksek Skor"
 name_en = "High Scorer"
 desc_tr = "10.000 skora ulaş"
 desc_en = "Reach a score of 10,000"
+icon = "score"
+
+[achievements.score_50k]
+id = "score_50k"
+name_tr = "Skor Canavarı"
+name_en = "Score Monster"
+desc_tr = "50.000 skora ulaş"
+desc_en = "Reach a score of 50,000"
+icon = "score"
+
+[achievements.score_100k]
+id = "score_100k"
+name_tr = "Efsane Skorcu"
+name_en = "Legendary Scorer"
+desc_tr = "100.000 skora ulaş"
+desc_en = "Reach a score of 100,000"
 icon = "score"
 
 [achievements.danger_escape]
@@ -45,3 +93,59 @@ name_en = "Close Call!"
 desc_tr = "Tehlike çizgisinden son anda kurtul"
 desc_en = "Escape from the danger line just in time"
 icon = "danger"
+
+[achievements.first_gameover]
+id = "first_gameover"
+name_tr = "Hoş Geldin"
+name_en = "Welcome"
+desc_tr = "İlk kez kaybet"
+desc_en = "Lose for the first time"
+icon = "danger"
+
+[achievements.total_100_merges]
+id = "total_100_merges"
+name_tr = "Birleştirici"
+name_en = "Merger"
+desc_tr = "Toplam 100 birleştirme yap"
+desc_en = "Perform 100 total merges"
+icon = "merge_1"
+
+[achievements.total_500_merges]
+id = "total_500_merges"
+name_tr = "Usta Birleştirici"
+name_en = "Master Merger"
+desc_tr = "Toplam 500 birleştirme yap"
+desc_en = "Perform 500 total merges"
+icon = "merge_1"
+
+[achievements.total_50_games]
+id = "total_50_games"
+name_tr = "Veteran"
+name_en = "Veteran"
+desc_tr = "50 oyun oyna"
+desc_en = "Play 50 games"
+icon = "score"
+
+[achievements.survive_60s]
+id = "survive_60s"
+name_tr = "Hayatta Kalan"
+name_en = "Survivor"
+desc_tr = "60 saniye hayatta kal"
+desc_en = "Survive for 60 seconds"
+icon = "score"
+
+[achievements.survive_180s]
+id = "survive_180s"
+name_tr = "Dayanıklı"
+name_en = "Enduring"
+desc_tr = "3 dakika hayatta kal"
+desc_en = "Survive for 3 minutes"
+icon = "score"
+
+[achievements.drop_100]
+id = "drop_100"
+name_tr = "Yağmur Yağdıran"
+name_en = "Rainmaker"
+desc_tr = "100 obje bırak"
+desc_en = "Drop 100 objects"
+icon = "merge_1"

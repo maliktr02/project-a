@@ -16,6 +16,7 @@ public class DataManager {
     private static final byte[] MAGIC_HEADER = new byte[]{'P', 'R', 'O', 'J'};
 
     private boolean isProductionMode = false;
+    private File rootDir;
     private final Map<String, String> fileContents = new HashMap<>();
 
     private double gravity = 9.81;
@@ -27,23 +28,49 @@ public class DataManager {
     private final Map<String, Map<String, Object>> achievements = new LinkedHashMap<>();
     private Map<String, Object> settingsMap = new HashMap<>();
     private Map<String, Object> themeMap = new HashMap<>();
+    private Map<String, Object> definesMap = new HashMap<>();
+
+    private final Map<String, Map<String, Object>> localeCache = new HashMap<>();
+
+    private int[] spawnWeights = {30, 27, 20, 15, 8};
+    private int maxSpawnRepeat = 2;
+    private int maxSpawnLevel = 5;
+
+    private double creditsCycleSeconds = 4.0;
+    private double introFallbackSeconds = 3.0;
+    private double toastDuration = 3.0;
+    private double comboWindow = 2.0;
+    private double shakeDecay = 0.88;
+
+    private double tauntChance = 0.25;
+    private double idleTimeout = 15.0;
+    private int repeatThreshold = 3;
+    private boolean gameoverTaunt = true;
+
+    private double defaultGravity = 9.81;
+    private double defaultBounce = 0.4;
+    private double defaultFriction = 0.97;
+    private double defaultAirDrag = 0.999;
+    private int defaultSubSteps = 8;
+    private double gravityScale = 85.0;
 
     public void loadData(File rootDir) {
+        this.rootDir = rootDir;
         File dataBin = new File(rootDir, "data.bin");
         if (dataBin.exists() && dataBin.length() > 0) {
             try {
                 loadFromBinary(dataBin);
                 isProductionMode = true;
-                System.out.println("[DataManager] Loaded configuration from production binary: data.bin");
+                GameLogger.get().info("DataManager", "Loaded from data.bin");
             } catch (Exception e) {
-                System.err.println("[DataManager] Failed to load data.bin, falling back to .toml files: " + e.getMessage());
+                GameLogger.get().error("DataManager", "data.bin failed, falling back to .toml", e);
                 loadFromTomlFiles(rootDir);
                 isProductionMode = false;
             }
         } else {
             loadFromTomlFiles(rootDir);
             isProductionMode = false;
-            System.out.println("[DataManager] Loaded configuration from developer .toml files");
+            GameLogger.get().info("DataManager", "Loaded from .toml files");
         }
 
         parseAllConfigs();
@@ -56,7 +83,7 @@ public class DataManager {
         byte[] magic = new byte[4];
         dis.readFully(magic);
         if (!Arrays.equals(magic, MAGIC_HEADER)) {
-            throw new IllegalArgumentException("Invalid magic header in data.bin");
+            throw new IllegalArgumentException("Invalid magic header");
         }
 
         int fileCount = dis.readInt();
@@ -79,34 +106,26 @@ public class DataManager {
     }
 
     private void loadFromTomlFiles(File rootDir) {
-        File versionFile = new File(rootDir, "version.toml");
-        if (versionFile.exists()) {
-            try {
-                fileContents.put("version.toml", new String(Files.readAllBytes(versionFile.toPath()), StandardCharsets.UTF_8));
-            } catch (IOException ignored) {}
-        }
+        String[] relativePaths = {
+            "version.toml",
+            "common/objects.toml",
+            "common/pyhsics.toml",
+            "common/achievements.toml",
+            "common/defines.toml",
+            "config/settings.toml",
+            "config/ui_theme.toml",
+            "locales/tr.toml",
+            "locales/en.toml"
+        };
 
-        String[] dirsToScan = new String[]{"common", "config", "locales"};
-        for (String dirName : dirsToScan) {
-            File dir = new File(rootDir, dirName);
-            if (dir.exists() && dir.isDirectory()) {
-                scanTomlDir(dir, dirName + "/");
-            }
-        }
-    }
-
-    private void scanTomlDir(File dir, String prefix) {
-        File[] children = dir.listFiles();
-        if (children == null) return;
-        for (File f : children) {
-            if (f.isDirectory()) {
-                scanTomlDir(f, prefix + f.getName() + "/");
-            } else if (f.getName().endsWith(".toml")) {
+        for (String relPath : relativePaths) {
+            File f = new File(rootDir, relPath);
+            if (f.exists()) {
                 try {
                     String content = new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8);
-                    fileContents.put(prefix + f.getName(), content);
+                    fileContents.put(relPath, content);
                 } catch (IOException e) {
-                    GameLogger.get().error("DataManager", "Error reading " + f.getName(), e);
+                    GameLogger.get().error("DataManager", "Error reading " + relPath, e);
                 }
             }
         }
@@ -114,97 +133,134 @@ public class DataManager {
 
     @SuppressWarnings("unchecked")
     private void parseAllConfigs() {
-        // Combine all common configs
-        Map<String, Object> commonMap = new HashMap<>();
-        for (Map.Entry<String, String> entry : fileContents.entrySet()) {
-            if (entry.getKey().startsWith("common/")) {
-                Map<String, Object> parsed = TomlParser.parse(entry.getValue());
-                deepMerge(commonMap, parsed);
-            }
-        }
+        String objectsToml = fileContents.getOrDefault("common/objects.toml", "");
+        Map<String, Object> parsedObjects = TomlParser.parse(objectsToml);
 
-        gravity = TomlParser.getDouble(commonMap, "_settings.gravity", 9.81);
-        bounceDamping = TomlParser.getDouble(commonMap, "_settings.bounce_damping", 0.4);
-        dangerTimeSeconds = TomlParser.getDouble(commonMap, "_settings.danger_time_seconds", 3.0);
-        maxSpawnValue = TomlParser.getLong(commonMap, "_settings.max_spawn_value", 256);
+        gravity = TomlParser.getDouble(parsedObjects, "_settings.gravity", 9.81);
+        bounceDamping = TomlParser.getDouble(parsedObjects, "_settings.bounce_damping", 0.4);
+        dangerTimeSeconds = TomlParser.getDouble(parsedObjects, "_settings.danger_time_seconds", 3.0);
+        maxSpawnValue = TomlParser.getLong(parsedObjects, "_settings.max_spawn_value", 256);
 
         objectConfigs.clear();
         for (int i = 1; i <= 12; i++) {
             String key = "objects.object_" + i;
-            if (TomlParser.getNestedValue(commonMap, key) != null) {
-                String id = TomlParser.getString(commonMap, key + ".id", "object_" + i);
-                String nameKey = TomlParser.getString(commonMap, key + ".name", "object_" + i + "_name");
-                long val = TomlParser.getLong(commonMap, key + ".value", (long) Math.pow(2, i - 1));
-                double mass = TomlParser.getDouble(commonMap, key + ".mass", 1.0 + i * 0.7);
-                long score = TomlParser.getLong(commonMap, key + ".score", val * 2);
-                String colorRgb = TomlParser.getString(commonMap, key + ".color_rgb", "238, 228, 218");
+            if (TomlParser.getNestedValue(parsedObjects, key) != null) {
+                String id = TomlParser.getString(parsedObjects, key + ".id", "object_" + i);
+                String nameKey = TomlParser.getString(parsedObjects, key + ".name", "object_" + i + "_name");
+                long val = TomlParser.getLong(parsedObjects, key + ".value", (long) Math.pow(2, i - 1));
+                double mass = TomlParser.getDouble(parsedObjects, key + ".mass", 1.0 + i * 0.7);
+                long score = TomlParser.getLong(parsedObjects, key + ".score", val * 2);
+                String colorRgb = TomlParser.getString(parsedObjects, key + ".color_rgb", "238, 228, 218");
                 Color col = parseRgbColor(colorRgb);
-
-                // Radius scaling: base 22px up to ~72px for level 12
                 double radius = 22.0 + (i - 1) * 4.6;
-
                 objectConfigs.add(new ObjectConfig(id, i, nameKey, val, mass, score, col, radius));
             }
         }
 
-        // 2. Settings & UI Theme
-        settingsMap = new HashMap<>();
-        themeMap = new HashMap<>();
-        for (Map.Entry<String, String> entry : fileContents.entrySet()) {
-            if (entry.getKey().startsWith("config/")) {
-                Map<String, Object> parsed = TomlParser.parse(entry.getValue());
-                if (entry.getKey().contains("settings")) deepMerge(settingsMap, parsed);
-                else deepMerge(themeMap, parsed);
-            }
-        }
+        settingsMap = TomlParser.parse(fileContents.getOrDefault("config/settings.toml", ""));
+        themeMap = TomlParser.parse(fileContents.getOrDefault("config/ui_theme.toml", ""));
 
-        // 3. Achievements
-        Object achs = commonMap.get("achievements");
+        Map<String, Object> achMap = TomlParser.parse(fileContents.getOrDefault("common/achievements.toml", ""));
+        Object achs = achMap.get("achievements");
         if (achs instanceof Map) {
             achievements.putAll((Map<String, Map<String, Object>>) achs);
         }
+
+        parseDefines();
     }
 
     @SuppressWarnings("unchecked")
-    private void deepMerge(Map<String, Object> target, Map<String, Object> source) {
-        for (Map.Entry<String, Object> entry : source.entrySet()) {
-            String key = entry.getKey();
-            Object value = entry.getValue();
-            if (value instanceof Map && target.containsKey(key) && target.get(key) instanceof Map) {
-                deepMerge((Map<String, Object>) target.get(key), (Map<String, Object>) value);
-            } else {
-                target.put(key, value);
-            }
+    private void parseDefines() {
+        String defToml = fileContents.getOrDefault("common/defines.toml", "");
+        if (defToml.isEmpty()) return;
+        definesMap = TomlParser.parse(defToml);
+
+        String weightsStr = TomlParser.getString(definesMap, "spawn.weights", "30,27,20,15,8");
+        String[] wParts = weightsStr.split(",");
+        spawnWeights = new int[wParts.length];
+        for (int i = 0; i < wParts.length; i++) {
+            spawnWeights[i] = Integer.parseInt(wParts[i].trim());
         }
+        maxSpawnRepeat = (int) TomlParser.getLong(definesMap, "spawn.max_repeat", 2);
+        maxSpawnLevel = (int) TomlParser.getLong(definesMap, "spawn.max_level", 5);
+
+        creditsCycleSeconds = TomlParser.getDouble(definesMap, "ui.credits_cycle_seconds", 4.0);
+        introFallbackSeconds = TomlParser.getDouble(definesMap, "ui.intro_fallback_seconds", 3.0);
+        toastDuration = TomlParser.getDouble(definesMap, "ui.toast_duration", 3.0);
+        comboWindow = TomlParser.getDouble(definesMap, "ui.combo_window", 2.0);
+        shakeDecay = TomlParser.getDouble(definesMap, "ui.shake_decay", 0.88);
+
+        tauntChance = TomlParser.getDouble(definesMap, "cringe.taunt_chance", 0.25);
+        idleTimeout = TomlParser.getDouble(definesMap, "cringe.idle_timeout", 15.0);
+        repeatThreshold = (int) TomlParser.getLong(definesMap, "cringe.repeat_threshold", 3);
+        gameoverTaunt = TomlParser.getBoolean(definesMap, "cringe.gameover_taunt", true);
+
+        defaultGravity = TomlParser.getDouble(definesMap, "physics_defaults.gravity", 9.81);
+        defaultBounce = TomlParser.getDouble(definesMap, "physics_defaults.bounce", 0.4);
+        defaultFriction = TomlParser.getDouble(definesMap, "physics_defaults.friction", 0.97);
+        defaultAirDrag = TomlParser.getDouble(definesMap, "physics_defaults.air_drag", 0.999);
+        defaultSubSteps = (int) TomlParser.getLong(definesMap, "physics_defaults.sub_steps", 8);
+        gravityScale = TomlParser.getDouble(definesMap, "physics_defaults.gravity_scale", 85.0);
+
+        dangerTimeSeconds = TomlParser.getDouble(definesMap, "danger.max_time", dangerTimeSeconds);
     }
 
     public String getLocalizedString(String lang, String category, String key) {
+        String cacheKey = lang + "." + category + "." + key;
         String path = "locales/" + lang + ".toml";
-        String content = fileContents.get(path);
-        if (content == null && !lang.equals("tr")) {
-            content = fileContents.get("locales/tr.toml");
+
+        Map<String, Object> parsed = localeCache.get(path);
+        if (parsed == null) {
+            String content = fileContents.get(path);
+            if (content == null && !lang.equals("tr")) {
+                content = fileContents.get("locales/tr.toml");
+                path = "locales/tr.toml";
+            }
+            if (content != null) {
+                parsed = TomlParser.parse(content);
+                localeCache.put(path, parsed);
+            }
         }
-        if (content != null) {
-            Map<String, Object> parsed = TomlParser.parse(content);
+
+        if (parsed != null) {
             String fullKey = lang + "." + category + "." + key;
             String val = TomlParser.getString(parsed, fullKey, null);
             if (val != null) return val;
-
-            // Fallback try without lang prefix
             val = TomlParser.getString(parsed, category + "." + key, null);
             if (val != null) return val;
         }
         return key;
     }
 
+    public List<String> getAllLocalizedKeys(String lang, String category) {
+        String path = "locales/" + lang + ".toml";
+        Map<String, Object> parsed = localeCache.get(path);
+        if (parsed == null) {
+            String content = fileContents.get(path);
+            if (content != null) {
+                parsed = TomlParser.parse(content);
+                localeCache.put(path, parsed);
+            }
+        }
+        List<String> keys = new ArrayList<>();
+        if (parsed != null) {
+            Object section = TomlParser.getNestedValue(parsed, lang + "." + category);
+            if (section instanceof Map) {
+                keys.addAll(((Map<String, Object>) section).keySet());
+            }
+        }
+        return keys;
+    }
+
     private Color parseRgbColor(String rgbStr) {
         try {
             String[] parts = rgbStr.split(",");
             if (parts.length == 3) {
-                int r = Integer.parseInt(parts[0].trim());
-                int g = Integer.parseInt(parts[1].trim());
-                int b = Integer.parseInt(parts[2].trim());
-                return new Color(r, g, b);
+                return new Color(
+                    Integer.parseInt(parts[0].trim()),
+                    Integer.parseInt(parts[1].trim()),
+                    Integer.parseInt(parts[2].trim())
+                );
             }
         } catch (Exception ignored) {}
         return new Color(220, 220, 220);
@@ -225,6 +281,7 @@ public class DataManager {
         return cipher.doFinal(encryptedData);
     }
 
+    public File getRootDir() { return rootDir; }
     public boolean isProductionMode() { return isProductionMode; }
     public double getGravity() { return gravity; }
     public double getBounceDamping() { return bounceDamping; }
@@ -234,6 +291,25 @@ public class DataManager {
     public Map<String, Object> getSettingsMap() { return settingsMap; }
     public Map<String, Object> getThemeMap() { return themeMap; }
     public Map<String, Map<String, Object>> getAchievements() { return achievements; }
+
+    public int[] getSpawnWeights() { return spawnWeights; }
+    public int getMaxSpawnRepeat() { return maxSpawnRepeat; }
+    public int getMaxSpawnLevel() { return maxSpawnLevel; }
+    public double getCreditsCycleSeconds() { return creditsCycleSeconds; }
+    public double getIntroFallbackSeconds() { return introFallbackSeconds; }
+    public double getToastDuration() { return toastDuration; }
+    public double getComboWindow() { return comboWindow; }
+    public double getShakeDecay() { return shakeDecay; }
+    public double getTauntChance() { return tauntChance; }
+    public double getIdleTimeout() { return idleTimeout; }
+    public int getRepeatThreshold() { return repeatThreshold; }
+    public boolean isGameoverTaunt() { return gameoverTaunt; }
+    public double getDefaultGravity() { return defaultGravity; }
+    public double getDefaultBounce() { return defaultBounce; }
+    public double getDefaultFriction() { return defaultFriction; }
+    public double getDefaultAirDrag() { return defaultAirDrag; }
+    public int getDefaultSubSteps() { return defaultSubSteps; }
+    public double getGravityScale() { return gravityScale; }
 
     public ObjectConfig getObjectConfigByLevel(int level) {
         if (level >= 1 && level <= objectConfigs.size()) {

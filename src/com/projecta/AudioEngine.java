@@ -39,7 +39,7 @@ public class AudioEngine {
                 scanDir(f, prefix + f.getName() + "/");
             } else {
                 String name = f.getName().toLowerCase();
-                if (name.endsWith(".wav") || name.endsWith(".aiff") || name.endsWith(".au") || name.endsWith(".mp3") || name.endsWith(".ogg")) {
+                if (name.endsWith(".wav") || name.endsWith(".aiff") || name.endsWith(".au")) {
                     String key = prefix + f.getName().substring(0, f.getName().lastIndexOf('.'));
                     audioFiles.put(key.toLowerCase(), f);
                 }
@@ -130,13 +130,10 @@ public class AudioEngine {
     public void startBackgroundMusic() {
         File bgmFile = findAudioFile("music/bgm");
         if (bgmFile == null) bgmFile = findAudioFile("music/background");
-        if (bgmFile == null) bgmFile = findAudioFile("music/theme");
 
         if (bgmFile != null) {
             bgmClip = playFile(bgmFile, musicVolumePercent / 100.0f, true);
-        }
-        
-        if (bgmClip == null) {
+        } else {
             new Thread(() -> {
                 try {
                     byte[] bgmPcm = generateAmbientLoop(8.0);

@@ -18,14 +18,11 @@ public class AchievementManager {
     }
 
     private final DataManager dataManager;
-    private final SaveManager saveManager;
     private final Set<String> unlockedIds = new HashSet<>();
     private final List<Toast> activeToasts = new ArrayList<>();
 
-    public AchievementManager(DataManager dataManager, SaveManager saveManager) {
+    public AchievementManager(DataManager dataManager) {
         this.dataManager = dataManager;
-        this.saveManager = saveManager;
-        this.unlockedIds.addAll(saveManager.getUnlockedAchievements());
     }
 
     public void checkMergeAchievements(int mergedLevel, int comboCount, long totalScore, boolean escapedDanger, AudioEngine audio) {
@@ -41,20 +38,10 @@ public class AchievementManager {
         if (mergedLevel >= 12) { // object_12 is 2048
             unlock("reach_2048", audio);
         }
-        
-        // Reach 1024
-        if (mergedLevel >= 11) {
-            unlock("reach_1024", audio);
-        }
 
         // 4. Combo x3
         if (comboCount >= 3) {
             unlock("combo_x3", audio);
-        }
-        
-        // Combo x5
-        if (comboCount >= 5) {
-            unlock("combo_x5", audio);
         }
 
         // 5. Score 10k
@@ -66,14 +53,6 @@ public class AchievementManager {
         if (escapedDanger) {
             unlock("danger_escape", audio);
         }
-        
-        // Check game count / drops
-        if (saveManager.getTotalDrops() >= 100) {
-            unlock("drop_100", audio);
-        }
-        if (saveManager.getTotalGames() >= 10) {
-            unlock("play_10_games", audio);
-        }
     }
 
     private void unlock(String id, AudioEngine audio) {
@@ -83,7 +62,6 @@ public class AchievementManager {
         Map<String, Object> entry = achs.get(id);
         if (entry != null) {
             unlockedIds.add(id);
-            saveManager.unlockAchievement(id);
             String title = (String) entry.getOrDefault("name_tr", id);
             String desc = (String) entry.getOrDefault("desc_tr", "");
             activeToasts.add(new Toast("🏆 BAŞARIM KAZANILDI: " + title, desc));

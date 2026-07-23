@@ -9,7 +9,6 @@ import javax.swing.JFrame;
 public class GameWindow extends JFrame implements Runnable {
 
     public enum GameState {
-        INTRO,
         MAIN_MENU,
         GAME,
         SETTINGS,
@@ -29,40 +28,18 @@ public class GameWindow extends JFrame implements Runnable {
     private SettingsPanel settingsPanel;
     private AchievementsPanel achievementsPanel;
 
-    private final SaveManager saveManager;
-
     private Canvas canvas;
     private BufferStrategy bufferStrategy;
     private boolean isRunning = false;
     private Thread gameThread;
-
-    private Image introImage;
-    private double introTimer = 0;
 
     public GameWindow(File rootDir) {
         // Load All Configs & Binaries
         dataManager = new DataManager();
         dataManager.loadData(rootDir);
 
-        saveManager = new SaveManager(rootDir);
-
         audioEngine = new AudioEngine();
-        audioEngine.init(rootDir);
-        audioEngine.setVolumes(saveManager.getSettingInt("sfx_volume", 80), saveManager.getSettingInt("music_volume", 70), saveManager.getSettingBool("sfx_enabled", true), saveManager.getSettingBool("music_enabled", true));
-
-        achievementManager = new AchievementManager(dataManager, saveManager);
-
-        try {
-            File introFile = new File(rootDir, "gfxgui/intro.png");
-            if (introFile.exists()) {
-                introImage = javax.imageio.ImageIO.read(introFile);
-            }
-        } catch (Exception e) {
-            GameLogger.get().error("GameWindow", "Failed to load intro.png", e);
-        }
-
-        currentState = GameState.INTRO;
-        audioEngine.playIntroSound();
+        achievementManager = new AchievementManager(dataManager);
 
         setTitle("Project A - 2048 Physics Merge");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -80,11 +57,11 @@ public class GameWindow extends JFrame implements Runnable {
         setWindowedMode(1280, 720);
 
         // Sub-Panels
-        mainMenuPanel = new MainMenuPanel(dataManager, saveManager, audioEngine, currentLang, new MainMenuPanel.MenuListener() {
+        mainMenuPanel = new MainMenuPanel(dataManager, audioEngine, currentLang, new MainMenuPanel.MenuListener() {
             @Override
             public void onPlay() {
                 if (mainGamePanel == null) {
-                    mainGamePanel = new MainGamePanel(dataManager, saveManager, audioEngine, achievementManager, currentLang, () -> currentState = GameState.MAIN_MENU);
+                    mainGamePanel = new MainGamePanel(dataManager, audioEngine, achievementManager, currentLang, () -> currentState = GameState.MAIN_MENU);
                 } else {
                     mainGamePanel.initGame();
                 }
@@ -101,7 +78,7 @@ public class GameWindow extends JFrame implements Runnable {
             public void onQuit() { System.exit(0); }
         });
 
-        settingsPanel = new SettingsPanel(dataManager, saveManager, audioEngine, currentLang, isFullscreen, new SettingsPanel.SettingsListener() {
+        settingsPanel = new SettingsPanel(dataManager, audioEngine, currentLang, isFullscreen, new SettingsPanel.SettingsListener() {
             @Override
             public void onBack() { currentState = GameState.MAIN_MENU; }
 
@@ -111,7 +88,6 @@ public class GameWindow extends JFrame implements Runnable {
             @Override
             public void onToggleLanguage() {
                 currentLang = currentLang.equals("tr") ? "en" : "tr";
-                saveManager.setSetting("language", currentLang);
                 mainMenuPanel.setLanguage(currentLang);
                 if (mainGamePanel != null) mainGamePanel.setLanguage(currentLang);
                 if (achievementsPanel != null) achievementsPanel.setLanguage(currentLang);
@@ -119,8 +95,6 @@ public class GameWindow extends JFrame implements Runnable {
 
             @Override
             public void onVolumeChanged(int sfxVol, int musicVol) {
-                saveManager.setSetting("sfx_volume", sfxVol);
-                saveManager.setSetting("music_volume", musicVol);
                 audioEngine.setVolumes(sfxVol, musicVol, sfxVol > 0, musicVol > 0);
             }
         });
@@ -167,8 +141,6 @@ public class GameWindow extends JFrame implements Runnable {
                 }
                 if (currentState == GameState.GAME && mainGamePanel != null) {
                     mainGamePanel.keyPressed(e.getKeyCode());
-                } else if (currentState == GameState.MAIN_MENU) {
-                    mainMenuPanel.keyPressed(e.getKeyCode());
                 }
             }
         });
@@ -212,13 +184,6 @@ public class GameWindow extends JFrame implements Runnable {
         int h = canvas.getHeight();
 
         switch (currentState) {
-            case INTRO:
-                introTimer += dt;
-                if (introTimer >= 4.0) {
-                    currentState = GameState.MAIN_MENU;
-                    audioEngine.startBackgroundMusic();
-                }
-                break;
             case MAIN_MENU: mainMenuPanel.update(dt, w, h); break;
             case GAME: if (mainGamePanel != null) mainGamePanel.update(dt, w, h); break;
             case SETTINGS: break;
@@ -241,15 +206,6 @@ public class GameWindow extends JFrame implements Runnable {
         int h = canvas.getHeight();
 
         switch (currentState) {
-            case INTRO:
-                g2d.setColor(Color.BLACK);
-                g2d.fillRect(0, 0, w, h);
-                if (introImage != null) {
-                    int iw = introImage.getWidth(null);
-                    int ih = introImage.getHeight(null);
-                    g2d.drawImage(introImage, (w - iw) / 2, (h - ih) / 2, null);
-                }
-                break;
             case MAIN_MENU: mainMenuPanel.draw(g2d, w, h); break;
             case GAME: if (mainGamePanel != null) mainGamePanel.draw(g2d, w, h); break;
             case SETTINGS: settingsPanel.draw(g2d, w, h); break;
