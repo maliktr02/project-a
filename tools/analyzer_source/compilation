@@ -1,2 +1,0 @@
-javac Analyzer.java
-& "C:\Program Files\Java\jdk-23\bin\jar.exe" cfe Analyzer.jar Analyzer *.class
