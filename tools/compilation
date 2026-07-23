@@ -1,4 +1,0 @@
-javac X.java
-& "C:\Program Files\Java\jdk-23\bin\jar.exe" cfe X.jar X *.class
-
-(X is variable in here)
